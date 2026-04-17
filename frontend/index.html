@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>GARAGE TERMINAL — Ghost Strategies</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+/* ============================================================
+   BLOOMBERG TERMINAL — DESIGN TOKENS
+   ============================================================ */
+:root {
+  --bg:           #080a0c;
+  --bg-panel:     #0d1014;
+  --bg-card:      #111418;
+  --bg-hover:     #161b20;
+  --border:       #1e2530;
+  --border-light: #252d38;
+  --divider:      #141920;
+
+  --text:         #c8d4de;
+  --text-muted:   #5c7080;
+  --text-dim:     #3a4a58;
+
+  --amber:        #e8a020;
+  --amber-bright: #ffb830;
+  --amber-dim:    rgba(232,160,32,0.08);
+  --amber-glow:   rgba(232,160,32,0.18);
+
+  --green:        #3ab86e;
+  --green-dim:    rgba(58,184,110,0.10);
+  --red:          #e83535;
+  --red-dim:      rgba(232,53,53,0.10);
+  --blue:         #4b8ef5;
+  --teal:         #3cb8c0;
+  --purple:       #a06ef0;
+
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+  --font-body: 'DM Sans', sans-serif;
+  --r: 4px;
+  --t: 150ms ease;
+}
+
+/* ============================================================
+   RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  /* NO overflow:hidden on html — breaks mobile scroll */
+}
+body {
+  min-height: 100dvh;
+  background: var(--bg);
+  /* scrolling allowed on body for mobile */
+}
+button { cursor: pointer; background: none; border: none; font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+canvas { display: block; }
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.logo-sub { color: var(--text-dim); font-weight: 300; letter-spacing: 0; }
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.live-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.topbar-time {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   TICKER TAPE
+   ============================================================ */
+.ticker-wrapper {
+  position: sticky;
+  top: 32px;
+  z-index: 99;
+  height: 34px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+.ticker-label {
+  padding: 0 9px;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-right: 1px solid var(--border);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.ticker-track { overflow: hidden; flex: 1; }
+.ticker-scroll {
+  display: flex;
+  animation: ticker-move 110s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
+}
+.ticker-wrapper:hover .ticker-scroll { animation-play-state: paused; }
+@keyframes ticker-move {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 34px;
+  border-right: 1px solid var(--divider);
+  white-space: nowrap;
+}
+.ticker-item.wl { background: var(--amber-dim); }
+.t-sym { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; color: var(--text); }
+.ticker-item.wl .t-sym { color: var(--amber); }
+.t-price { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text); }
+.t-chg { font-size: 10px; font-variant-numeric: tabular-nums; }
+.t-chg.up { color: var(--green); }
+.t-chg.dn { color: var(--red); }
+
+/* ============================================================
+   BODY LAYOUT
+   ============================================================ */
+.body-grid {
+  display: grid;
+  /* Desktop: sidebar | center | right */
+  grid-template-columns: 220px 1fr 280px;
+  grid-template-rows: 1fr;
+  min-height: calc(100dvh - 66px);
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  /* Sidebar is sticky on desktop */
+  position: sticky;
+  top: 66px;
+  height: calc(100dvh - 66px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.s-section { border-bottom: 1px solid var(--divider); padding: 8px 0; }
+.s-header {
+  padding: 0 10px 5px;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.wl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background var(--t);
+  border-left: 2px solid transparent;
+}
+.wl-row:hover { background: var(--bg-hover); }
+.wl-row.active { background: var(--amber-dim); border-left-color: var(--amber); }
+.wl-sym { font-size: 10px; font-weight: 500; letter-spacing: 0.05em; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-row.active .wl-sym { color: var(--amber); }
+.wl-price { font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 500; }
+.wl-delta { font-size: 10px; font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
+.wl-delta.up { color: var(--green); }
+.wl-delta.dn { color: var(--red); }
+
+.kpi-block { padding: 8px 10px; }
+.kpi-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.kpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+.kpi-val { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--amber); }
+.kpi-val.g { color: var(--green); }
+.kpi-val.r { color: var(--red); }
+
+.mkt-bar {
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-top: auto;
+  border-top: 1px solid var(--divider);
+}
+.mkt-bar .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); }
+
+/* ============================================================
+   CENTER PANEL
+   ============================================================ */
+.center {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-width: 0;
+  align-self: start; /* don't stretch past content */
+}
+
+.car-header {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  position: sticky;
+  top: 66px;
+  z-index: 50;
+}
+.ch-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.ch-sym { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+.ch-name { font-family: var(--font-body); font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; line-height: 1.1; }
+.ch-price { font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--amber); line-height: 1; text-align: right; }
+.ch-delta { font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 3px; text-align: right; }
+.ch-delta.up { color: var(--green); }
+.ch-delta.dn { color: var(--red); }
+.ch-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+.cs { display: flex; flex-direction: column; gap: 2px; }
+.cs-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+.cs-val { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cs-val.g { color: var(--green); }
+.cs-val.r { color: var(--red); }
+.cs-val.a { color: var(--amber); }
+
+/* Chart */
+.chart-section {
+  padding: 10px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.period-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.period-btns { display: flex; gap: 4px; }
+.p-btn {
+  padding: 3px 9px;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  background: transparent;
+  transition: all var(--t);
+}
+.p-btn:hover { border-color: var(--text-muted); color: var(--text); }
+.p-btn.active { background: var(--amber); color: #080a0c; border-color: var(--amber); font-weight: 600; }
+.chart-lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+.chart-wrap {
+  /* Fixed height chart so it doesn't collapse */
+  height: 300px;
+  position: relative;
+}
+@media (min-height: 700px) { .chart-wrap { height: 360px; } }
+
+/* Specs strip */
+.specs-strip {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sp { display: flex; flex-direction: column; gap: 2px; }
+.sp-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+.sp-val { font-size: 11px; color: var(--text); white-space: nowrap; }
+.sp-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; font-style: italic; flex: 1; min-width: 180px; }
+
+/* ============================================================
+   COST-TO-OWN PANEL
+   ============================================================ */
+.cto-toggle-row {
+  padding: 6px 16px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--divider);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cto-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  transition: all var(--t);
+}
+.cto-toggle-btn:hover { border-color: var(--teal); color: var(--teal); }
+.cto-toggle-btn.open { background: rgba(60,184,192,0.08); border-color: var(--teal); color: var(--teal); }
+.cto-toggle-chevron { font-size: 8px; transition: transform 200ms ease; }
+.cto-toggle-btn.open .cto-toggle-chevron { transform: rotate(180deg); }
+.cto-badge {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.cto-badge span { color: var(--teal); font-weight: 500; }
+
+.cto-panel {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 320ms ease, opacity 200ms ease;
+  opacity: 0;
+}
+.cto-panel.open {
+  max-height: 600px;
+  opacity: 1;
+}
+.cto-inner {
+  padding: 12px 16px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+@media (max-width: 600px) {
+  .cto-inner { grid-template-columns: 1fr; }
+}
+.cto-section {
+  padding: 8px 10px 8px 0;
+  border-right: 1px solid var(--divider);
+}
+.cto-section:nth-child(even) {
+  padding-left: 14px;
+  border-right: none;
+}
+.cto-section:nth-child(n+3) {
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.cto-sec-hdr {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.cto-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+.cto-lbl {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.cto-val {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+.cto-val.na { color: var(--text-dim); font-size: 9px; }
+.cto-val.g { color: var(--green); }
+.cto-val.t { color: var(--teal); }
+.cto-note {
+  font-size: 9px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-top: 2px;
+  font-style: italic;
+}
+.cto-total-row {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cto-total-lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.cto-total-val {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.cto-true-price {
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--amber);
+  line-height: 1;
+}
+.cto-breakdown {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   RIGHT PANEL
+   ============================================================ */
+.right-panel {
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  position: sticky;
+  top: 66px;
+  height: calc(100dvh - 66px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.right-panel::-webkit-scrollbar { width: 3px; }
+.right-panel::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.rp-sec { border-bottom: 1px solid var(--divider); padding: 10px; }
+.rp-hdr { font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--amber); margin-bottom: 8px; font-weight: 500; }
+
+/* Price level rows */
+.pl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.pl-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; width: 64px; flex-shrink: 0; }
+.pl-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.pl-fill { height: 100%; border-radius: 2px; }
+.pl-val { font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; min-width: 60px; }
+.pl-val.g { color: var(--green); }
+.pl-val.r { color: var(--red); }
+.pl-val.a { color: var(--amber); }
+
+/* Range gauge */
+.gauge-wrap { margin: 6px 0 2px; }
+.gauge-track { height: 6px; background: var(--border); border-radius: 3px; position: relative; overflow: visible; }
+.gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--green), var(--amber)); border-radius: 3px; }
+.gauge-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; background: var(--amber); border-radius: 50%; border: 2px solid var(--bg); box-shadow: 0 0 6px var(--amber-glow); }
+.gauge-lbls { display: flex; justify-content: space-between; margin-top: 5px; font-size: 9px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* Period stats */
+.stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 4px; }
+.stat-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.stat-val { font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* Comparison */
+.comp-row {
+  display: flex; align-items: center; gap: 6px; padding: 4px 0;
+  border-bottom: 1px solid var(--divider); cursor: pointer;
+  transition: background var(--t);
+}
+.comp-row:last-child { border-bottom: none; }
+.comp-row:hover { background: var(--bg-hover); }
+.comp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.comp-name { font-size: 10px; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp-price { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--text); }
+.comp-chg { font-size: 9px; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.comp-chg.up { color: var(--green); }
+.comp-chg.dn { color: var(--red); }
+
+/* Links */
+.link-row { display: flex; gap: 6px; margin-top: 8px; }
+.ext-btn {
+  flex: 1; height: 28px; border-radius: 3px; border: 1px solid var(--border-light);
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+  transition: all var(--t);
+}
+.ext-btn:hover { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+.ext-btn.primary { background: var(--amber); color: #080a0c; border-color: var(--amber); font-weight: 600; }
+.ext-btn.primary:hover { background: var(--amber-bright); }
+
+/* ============================================================
+   MOBILE — stack everything vertically
+   ============================================================ */
+@media (max-width: 768px) {
+  .body-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+
+  /* Sidebar becomes a horizontal scrollable watchlist on mobile */
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: column;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-y: visible;
+  }
+  .s-section.kpi-section { display: none; } /* hide portfolio KPIs on mobile */
+  .wl-section { padding-bottom: 4px; }
+  .mkt-bar { display: none; }
+
+  /* Watchlist rows scroll horizontally */
+  #watchlistRows {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    gap: 0;
+  }
+  #watchlistRows::-webkit-scrollbar { display: none; }
+  .wl-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 7px 12px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .wl-row.active {
+    border-bottom-color: var(--amber);
+    border-left: none;
+    background: var(--amber-dim);
+  }
+  .wl-sym { font-size: 9px; }
+  .wl-price { font-size: 12px; }
+  .wl-delta { min-width: unset; text-align: left; }
+
+  /* Center: unset sticky for car header on mobile */
+  .car-header { position: static; }
+
+  /* Chart shorter on mobile */
+  .chart-wrap { height: 240px; }
+
+  /* Right panel becomes a bottom section */
+  .right-panel {
+    position: static;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Topbar: hide some elements on small screens */
+  .logo-sub { display: none; }
+  .status-pill:not(:first-child) { display: none; }
+
+  /* Bigger touch targets */
+  .p-btn { padding: 5px 12px; font-size: 11px; }
+}
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <svg aria-label="Garage Terminal" width="18" height="18" viewBox="0 0 20 20" fill="none">
+      <rect x="1" y="12" width="18" height="7" rx="2" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M4 12 L6.5 5 L10 7 L13.5 5 L16 12" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+      <circle cx="6.5" cy="13.5" r="1.5" fill="currentColor" opacity="0.6"/>
+      <circle cx="13.5" cy="13.5" r="1.5" fill="currentColor" opacity="0.6"/>
+    </svg>
+    GARAGE TERMINAL
+    <span class="logo-sub">// Ghost Strategies</span>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill"><div class="live-dot"></div>LIVE</div>
+    <div class="status-pill">5 TRACKED</div>
+    <div class="topbar-time" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- TICKER -->
+<div class="ticker-wrapper">
+  <div class="ticker-label">MKT</div>
+  <div class="ticker-track">
+    <div class="ticker-scroll" id="tickerScroll"></div>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="body-grid">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="s-section wl-section">
+      <div class="s-header">Watchlist</div>
+      <div id="watchlistRows"></div>
+    </div>
+    <div class="s-section kpi-section">
+      <div class="s-header">Portfolio</div>
+      <div class="kpi-block">
+        <div class="kpi-row"><span class="kpi-label">Total Value</span><span class="kpi-val" id="kpiTotal">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">True Acq. Cost</span><span class="kpi-val" style="color:var(--teal)" id="kpiTrueAcq">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">Cars Tracked</span><span class="kpi-val" id="kpiCount">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">Gainers</span><span class="kpi-val g" id="kpiGainers">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">Losers</span><span class="kpi-val r" id="kpiLosers">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">JDM Avg</span><span class="kpi-val" id="kpiJdm">—</span></div>
+        <div class="kpi-row"><span class="kpi-label">Exotic Avg</span><span class="kpi-val" id="kpiExotic">—</span></div>
+      </div>
+    </div>
+    <div class="mkt-bar"><div class="dot"></div>MARKET OPEN · APR 2026</div>
+  </aside>
+
+  <!-- CENTER -->
+  <main class="center">
+    <!-- Car Header -->
+    <div class="car-header" id="carHeader">
+      <div class="ch-top">
+        <div>
+          <div class="ch-sym" id="hSym">R33GTR · JDM · 1995–1998</div>
+          <div class="ch-name" id="hName">Skyline R33 GT-R</div>
+        </div>
+        <div>
+          <div class="ch-price" id="hPrice">$77,396</div>
+          <div class="ch-delta up" id="hDelta">▲ +$3,196 (+4.31%)</div>
+        </div>
+      </div>
+      <div class="ch-stats" id="hStats"></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-section">
+      <div class="period-row">
+        <div class="period-btns">
+          <button class="p-btn" data-p="1M">1M</button>
+          <button class="p-btn" data-p="3M">3M</button>
+          <button class="p-btn" data-p="6M">6M</button>
+          <button class="p-btn active" data-p="1Y">1Y</button>
+        </div>
+        <div class="chart-lbl">AVG MARKET · USD</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Specs -->
+    <div class="specs-strip" id="specsStrip">
+      <div class="sp"><div class="sp-lbl">Engine</div><div class="sp-val" id="spEngine">RB26DETT Twin-Turbo I6</div></div>
+      <div class="sp"><div class="sp-lbl">Power</div><div class="sp-val" id="spPower">276 hp</div></div>
+      <div class="sp"><div class="sp-lbl">Years</div><div class="sp-val" id="spYears">1995–1998</div></div>
+      <div class="sp sp-note" id="spNote">V-Spec variants command premium. Watch for V-Spec II Nür.</div>
+    </div>
+
+    <!-- Cost-to-Own Toggle Row -->
+    <div class="cto-toggle-row">
+      <button class="cto-toggle-btn" id="ctoToggle" onclick="toggleCto()">
+        <span>COST-TO-OWN</span>
+        <span class="cto-toggle-chevron" id="ctoChevron">▼</span>
+      </button>
+      <div class="cto-badge">True Acq. Cost: <span id="ctoBadgeVal">—</span></div>
+    </div>
+
+    <!-- Cost-to-Own Panel -->
+    <div class="cto-panel" id="ctoPanel">
+      <div class="cto-inner" id="ctoInner"></div>
+    </div>
+
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+
+    <div class="rp-sec">
+      <div class="rp-hdr">Price Levels</div>
+      <div id="priceLevels"></div>
+      <div class="gauge-wrap" id="gaugeWrap">
+        <div class="gauge-track">
+          <div class="gauge-fill" id="gFill"></div>
+          <div class="gauge-thumb" id="gThumb"></div>
+        </div>
+        <div class="gauge-lbls"><span id="gLow">—</span><span style="color:var(--amber)">AVG</span><span id="gHigh">—</span></div>
+      </div>
+    </div>
+
+    <div class="rp-sec">
+      <div class="rp-hdr" id="periodHdr">Period Stats (1Y)</div>
+      <div id="periodStats"></div>
+    </div>
+
+    <div class="rp-sec">
+      <div class="rp-hdr">All Cars</div>
+      <div id="compTable"></div>
+    </div>
+
+    <div class="rp-sec" id="linksRp">
+      <div class="rp-hdr">External Data</div>
+      <div class="link-row" id="extLinks"></div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- ============================================================
+     EMBEDDED DATA (no backend needed)
+     ============================================================ -->
+<!-- cars.config.js is the SINGLE SOURCE OF TRUTH for all car data.
+     To add a car: edit cars.config.js only. No changes needed here. -->
+<script src="cars.config.js"></script>
+<script src="data.js"></script>
+
+<script>
+// ============================================================
+// DERIVE WATCHLIST FROM cars.config.js
+// ============================================================
+// cars.config.js (loaded above) defines the raw WATCHLIST array.
+// Here we compute delta / delta_pct / delta_dir from avg_price vs prev_avg
+// so cars.config.js stays clean — just raw price data, no derived fields.
+//
+// To add a car: edit frontend/cars.config.js only.
+// ============================================================
+
+// Compute deltas from cars.config.js data and overwrite the global.
+// WATCHLIST is already declared as 'var' in cars.config.js — we just
+// reassign it here with computed fields. No redeclaration needed.
+WATCHLIST = WATCHLIST.map(function(c) {
+  var delta     = c.avg_price - c.prev_avg;
+  var delta_pct = (delta / c.prev_avg) * 100;
+  return Object.assign({}, c, {
+    delta:     delta,
+    delta_pct: delta_pct,
+    delta_dir: delta >= 0 ? 'up' : 'down',
+  });
+});
+
+// ============================================================
+// DERIVE TICKER_DATA FROM cars.config.js (TICKER_UNIVERSE)
+// ============================================================
+var TICKER_DATA = TICKER_UNIVERSE.map(function(t) {
+  return {
+    symbol:    t.symbol,
+    name:      t.name,
+    price:     t.price,
+    change:    t.change,
+    direction: t.change >= 0 ? 'up' : 'down',
+  };
+});
+
+// ============================================================
+// UTILS
+// ============================================================
+const fmt   = n => '$' + Number(n).toLocaleString('en-US', {maximumFractionDigits:0});
+const fmtK  = n => n >= 1000000 ? '$'+(n/1000000).toFixed(1)+'M' : n >= 1000 ? '$'+Math.round(n/1000)+'K' : fmt(n);
+const fmtPct= n => (n>=0?'+':'')+Number(n).toFixed(2)+'%';
+
+// ============================================================
+// STATE
+// ============================================================
+let activeId = 'r33-gtr';
+let activePeriod = '1Y';
+let chart = null;
+
+// ============================================================
+// CLOCK
+// ============================================================
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tick,1000); tick();
+
+// ============================================================
+// TICKER
+// ============================================================
+function buildTicker() {
+  // Interleave watchlist cars
+  const items = [];
+  WATCHLIST.forEach((w,i) => {
+    const arrow = w.delta_dir==='up'?'▲':'▼';
+    items.push({symbol:w.symbol, name:w.model, price:w.avg_price, change:w.delta_pct, direction:w.delta_dir, wl:true});
+    if (TICKER_DATA[i*3]) items.push(TICKER_DATA[i*3]);
+    if (TICKER_DATA[i*3+1]) items.push(TICKER_DATA[i*3+1]);
+    if (TICKER_DATA[i*3+2]) items.push(TICKER_DATA[i*3+2]);
+  });
+  // Add remaining
+  items.push(...TICKER_DATA.slice(15));
+
+  const html = items.map(it => {
+    const cls = it.direction==='up'?'up':'dn';
+    const arrow = it.direction==='up'?'▲':'▼';
+    return `<div class="ticker-item${it.wl?' wl':''}">
+      <span class="t-sym">${it.symbol}</span>
+      <span class="t-price">${fmt(it.price)}</span>
+      <span class="t-chg ${cls}">${arrow} ${fmtPct(it.change)}</span>
+    </div>`;
+  }).join('');
+
+  const el = document.getElementById('tickerScroll');
+  el.innerHTML = html + html; // duplicate for seamless loop
+}
+
+// ============================================================
+// WATCHLIST SIDEBAR
+// ============================================================
+function renderWatchlist() {
+  document.getElementById('watchlistRows').innerHTML = WATCHLIST.map(c => {
+    const up = c.delta_dir==='up';
+    return `<div class="wl-row${c.id===activeId?' active':''}" onclick="selectCar('${c.id}')">
+      <span class="wl-sym">${c.symbol}</span>
+      <span class="wl-price">${fmtK(c.avg_price)}</span>
+      <span class="wl-delta ${up?'up':'dn'}">${up?'▲':'▼'}${Math.abs(c.delta_pct).toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// COMPARISON TABLE
+// ============================================================
+function renderComp() {
+  document.getElementById('compTable').innerHTML = WATCHLIST.map(c => {
+    const up = c.delta_dir==='up';
+    return `<div class="comp-row" onclick="selectCar('${c.id}')">
+      <div class="comp-dot" style="background:${c.color}"></div>
+      <span class="comp-name">${c.model}</span>
+      <span class="comp-price">${fmtK(c.avg_price)}</span>
+      <span class="comp-chg ${up?'up':'dn'}">${up?'▲':'▼'}${Math.abs(c.delta_pct).toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// SELECT CAR
+// ============================================================
+function selectCar(id) {
+  activeId = id;
+  const car = WATCHLIST.find(c=>c.id===id);
+  if (!car) return;
+
+  renderWatchlist();
+
+  // Header
+  document.getElementById('hSym').textContent = `${car.symbol} · ${car.category} · ${car.years}`;
+  document.getElementById('hName').textContent = car.model;
+  document.getElementById('hPrice').textContent = fmt(car.avg_price);
+
+  const dEl = document.getElementById('hDelta');
+  const up = car.delta_dir==='up';
+  dEl.textContent = `${up?'▲':'▼'} ${up?'+':''}${fmt(car.delta)} (${fmtPct(car.delta_pct)}) vs prev period`;
+  dEl.className = `ch-delta ${up?'up':'dn'}`;
+
+  // Stats row
+  document.getElementById('hStats').innerHTML = [
+    {l:'Open',    v:fmtK(car.prev_avg),    c:''},
+    {l:'Current', v:fmt(car.avg_price),    c:'a'},
+    {l:'Low',     v:fmtK(car.low_price),   c:'g'},
+    {l:'High',    v:fmtK(car.high_price),  c:'r'},
+    {l:'Category',v:car.category,          c:''},
+  ].map(s=>`<div class="cs"><div class="cs-lbl">${s.l}</div><div class="cs-val ${s.c}">${s.v}</div></div>`).join('');
+
+  // Specs
+  document.getElementById('spEngine').textContent = car.engine;
+  document.getElementById('spPower').textContent  = car.power;
+  document.getElementById('spYears').textContent  = car.years;
+  document.getElementById('spNote').textContent   = car.note;
+
+  // Cost-to-Own panel (updates content; panel stays open/closed as user chose)
+  renderCto(car);
+
+  // Price levels
+  const range = car.high_price - car.low_price;
+  document.getElementById('priceLevels').innerHTML = [
+    {l:'High',       v:car.high_price, pct:100, c:'r', fill:'var(--red)'},
+    {l:'Avg Market', v:car.avg_price,  pct:Math.round(((car.avg_price-car.low_price)/range)*100), c:'a', fill:'var(--amber)'},
+    {l:'Low',        v:car.low_price,  pct:0,   c:'g', fill:'var(--green)'},
+  ].map(r=>`<div class="pl-row">
+    <span class="pl-lbl">${r.l}</span>
+    <div class="pl-bar"><div class="pl-fill" style="width:${r.pct}%;background:${r.fill}"></div></div>
+    <span class="pl-val ${r.c}">${fmt(r.v)}</span>
+  </div>`).join('');
+
+  // Gauge
+  const pct = Math.min(Math.max(((car.avg_price-car.low_price)/range)*100,2),98);
+  document.getElementById('gFill').style.width  = pct+'%';
+  document.getElementById('gThumb').style.left  = pct+'%';
+  document.getElementById('gLow').textContent   = fmtK(car.low_price);
+  document.getElementById('gHigh').textContent  = fmtK(car.high_price);
+
+  // Links
+  document.getElementById('extLinks').innerHTML =
+    `<a href="${car.bat_url}" target="_blank" rel="noopener" class="ext-btn primary">Listings ↗</a>
+     <a href="${car.market_url}" target="_blank" rel="noopener" class="ext-btn">Market ↗</a>`;
+
+  renderComp();
+  renderChart();
+}
+
+// ============================================================
+// CHART
+// ============================================================
+function getHistory(id, period) {
+  const all = BAKED_HISTORY[id] || [];
+  const pMap = {'1M':30,'3M':90,'6M':180,'1Y':365};
+  return all.slice(-(pMap[period]||365));
+}
+
+function calcStats(data) {
+  const p = data.map(d=>d.price);
+  return {
+    open: p[0], close: p[p.length-1],
+    high: Math.max(...p), low: Math.min(...p),
+    change: p[p.length-1]-p[0],
+    change_pct: ((p[p.length-1]-p[0])/p[0]*100).toFixed(2),
+  };
+}
+
+function renderPeriodStats(stats) {
+  const up = stats.change >= 0;
+  document.getElementById('periodStats').innerHTML = [
+    {l:'Open',         v:fmt(stats.open),                       c:''},
+    {l:'Close',        v:fmt(stats.close),                      c:''},
+    {l:'Period High',  v:fmt(stats.high),                       c:'r'},
+    {l:'Period Low',   v:fmt(stats.low),                        c:'g'},
+    {l:'Change',       v:(up?'+':'')+fmt(stats.change),         c:up?'g':'r'},
+    {l:'Change %',     v:fmtPct(parseFloat(stats.change_pct)),  c:up?'g':'r'},
+  ].map(s=>`<div class="stat-row">
+    <span class="stat-lbl">${s.l}</span>
+    <span class="stat-val" style="${s.c==='g'?'color:var(--green)':s.c==='r'?'color:var(--red)':''}">${s.v}</span>
+  </div>`).join('');
+}
+
+function renderChart() {
+  const car = WATCHLIST.find(c=>c.id===activeId);
+  if (!car) return;
+
+  const history = getHistory(activeId, activePeriod);
+  const labels  = history.map(d=>d.date);
+  const prices  = history.map(d=>d.price);
+
+  renderPeriodStats(calcStats(history));
+
+  const canvas = document.getElementById('priceChart');
+  const ctx    = canvas.getContext('2d');
+
+  // Gradient under the line
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 300);
+  grad.addColorStop(0, car.color+'44');
+  grad.addColorStop(1, car.color+'00');
+
+  if (chart) { chart.destroy(); chart = null; }
+
+  // Thin x-axis labels
+  const skip = Math.max(1, Math.floor(labels.length/7));
+  const displayLabels = labels.map((l,i) => i%skip===0 ? l.slice(5) : '');
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: displayLabels,
+      datasets: [{
+        data: prices,
+        borderColor: car.color,
+        borderWidth: 1.5,
+        backgroundColor: grad,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: car.color,
+        pointHoverBorderColor: '#080a0c',
+        pointHoverBorderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor: '#111418',
+          borderColor: '#252d38',
+          borderWidth: 1,
+          titleColor: '#5c7080',
+          bodyColor: '#c8d4de',
+          padding: 10,
+          displayColors: false,
+          callbacks: {
+            title: items => labels[items[0].dataIndex],
+            label: item  => 'Avg: ' + fmt(item.raw),
+          }
+        },
+      },
+      scales: {
+        x: {
+          grid:   { color:'#141920', drawTicks:false },
+          border: { color:'#1e2530' },
+          ticks:  { color:'#3a4a58', font:{family:"'DM Mono',monospace",size:9}, maxRotation:0 }
+        },
+        y: {
+          position: 'right',
+          grid:   { color:'#141920', drawTicks:false },
+          border: { color:'#1e2530', dash:[3,3] },
+          ticks:  { color:'#5c7080', font:{family:"'DM Mono',monospace",size:10}, callback:v=>fmtK(v), maxTicksLimit:5 }
+        }
+      },
+      animation: { duration:500, easing:'easeInOutQuart' },
+    }
+  });
+}
+
+// ============================================================
+// PERIOD BUTTONS
+// ============================================================
+document.querySelectorAll('.p-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.p-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activePeriod = btn.dataset.p;
+    document.getElementById('periodHdr').textContent = `Period Stats (${activePeriod})`;
+    renderChart();
+  });
+});
+
+// ============================================================
+// COST-TO-OWN PANEL
+// ============================================================
+var ctoOpen = false;
+
+function toggleCto() {
+  ctoOpen = !ctoOpen;
+  var panel  = document.getElementById('ctoPanel');
+  var btn    = document.getElementById('ctoToggle');
+  if (ctoOpen) {
+    panel.classList.add('open');
+    btn.classList.add('open');
+  } else {
+    panel.classList.remove('open');
+    btn.classList.remove('open');
+  }
+}
+
+function renderCto(car) {
+  var cto = car.cost_to_own;
+  if (!cto) {
+    document.getElementById('ctoInner').innerHTML =
+      '<div style="grid-column:1/-1;padding:10px 0;color:var(--text-dim);font-size:10px;">No cost-to-own data for this car.</div>';
+    document.getElementById('ctoBadgeVal').textContent = '—';
+    return;
+  }
+
+  var trueAcq = car.avg_price + cto.total_first_year_extra;
+  document.getElementById('ctoBadgeVal').textContent = fmt(trueAcq);
+
+  // Import / shipping section
+  var importSection = '';
+  if (cto.import_duty_pct > 0) {
+    importSection =
+      '<div class="cto-section">' +
+        '<div class="cto-sec-hdr">Import Costs</div>' +
+        '<div class="cto-row"><span class="cto-lbl">Duty Rate</span><span class="cto-val">' + (cto.import_duty_pct*100).toFixed(1) + '%</span></div>' +
+        '<div class="cto-row"><span class="cto-lbl">Duty Est.</span><span class="cto-val">' + fmt(cto.import_duty_est) + '</span></div>' +
+        '<div class="cto-row"><span class="cto-lbl">Shipping</span><span class="cto-val">' + fmt(cto.shipping_est) + '</span></div>' +
+        '<div class="cto-note">25-yr import exemption (US). Shipped JP → US West Coast.</div>' +
+      '</div>';
+  } else {
+    importSection =
+      '<div class="cto-section">' +
+        '<div class="cto-sec-hdr">Import Costs</div>' +
+        '<div class="cto-row"><span class="cto-lbl">Import Duty</span><span class="cto-val na">N/A — US Spec</span></div>' +
+        '<div class="cto-row"><span class="cto-lbl">Shipping</span><span class="cto-val na">N/A — Domestic</span></div>' +
+      '</div>';
+  }
+
+  var insuranceSection =
+    '<div class="cto-section">' +
+      '<div class="cto-sec-hdr">Insurance</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.insurance_annual) + '/yr</span></div>' +
+      '<div class="cto-note">' + cto.insurance_note + '</div>' +
+    '</div>';
+
+  var maintenanceSection =
+    '<div class="cto-section">' +
+      '<div class="cto-sec-hdr">Maintenance</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.maintenance_annual) + '/yr</span></div>' +
+      '<div class="cto-note">' + cto.maintenance_note + '</div>' +
+    '</div>';
+
+  var yr1Extra =
+    '<div class="cto-section">' +
+      '<div class="cto-sec-hdr">Year 1 Extra</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Total Add\'l</span><span class="cto-val">' + fmt(cto.total_first_year_extra) + '</span></div>' +
+      '<div class="cto-note">Duty + shipping + insurance + maintenance</div>' +
+    '</div>';
+
+  var totalRow =
+    '<div class="cto-total-row">' +
+      '<div class="cto-total-lbl">TRUE ACQ. COST<br><span style="color:var(--text-dim);font-size:9px;letter-spacing:0;text-transform:none;font-weight:400">Market avg + first-year costs</span></div>' +
+      '<div class="cto-total-val">' +
+        '<div class="cto-true-price">' + fmt(trueAcq) + '</div>' +
+        '<div class="cto-breakdown">' + fmt(car.avg_price) + ' market + ' + fmt(cto.total_first_year_extra) + ' costs</div>' +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('ctoInner').innerHTML =
+    importSection + insuranceSection + maintenanceSection + yr1Extra + totalRow;
+}
+
+// ============================================================
+// PORTFOLIO KPIs
+// ============================================================
+function renderPortfolio() {
+  var total   = WATCHLIST.reduce(function(s,c){ return s + c.avg_price; }, 0);
+  var gainers = WATCHLIST.filter(function(c){ return c.delta_dir === 'up'; }).length;
+  var losers  = WATCHLIST.filter(function(c){ return c.delta_dir === 'down'; }).length;
+
+  // True acquisition cost = sum of (market price + first-year extra) for all cars with cost_to_own
+  var trueAcqTotal = WATCHLIST.reduce(function(s,c) {
+    var extra = (c.cost_to_own && c.cost_to_own.total_first_year_extra) ? c.cost_to_own.total_first_year_extra : 0;
+    return s + c.avg_price + extra;
+  }, 0);
+
+  // Category averages — extend these if you add new categories
+  var jdmCars    = WATCHLIST.filter(function(c){ return c.category === 'JDM'; });
+  var exoticCars = WATCHLIST.filter(function(c){ return c.category === 'Exotic'; });
+  var modernCars = WATCHLIST.filter(function(c){ return c.category === 'Modern'; });
+
+  var jdmAvg    = jdmCars.length    ? jdmCars.reduce(function(s,c){return s+c.avg_price;},0)    / jdmCars.length    : null;
+  var exoticAvg = exoticCars.length ? exoticCars.reduce(function(s,c){return s+c.avg_price;},0) / exoticCars.length : null;
+
+  document.getElementById('kpiTotal').textContent   = fmtK(total);
+  document.getElementById('kpiTrueAcq').textContent = fmtK(trueAcqTotal);
+  document.getElementById('kpiCount').textContent   = WATCHLIST.length;
+  document.getElementById('kpiGainers').textContent = gainers;
+  document.getElementById('kpiLosers').textContent  = losers;
+  document.getElementById('kpiJdm').textContent     = jdmAvg    ? fmtK(jdmAvg)    : 'N/A';
+  document.getElementById('kpiExotic').textContent  = exoticAvg ? fmtK(exoticAvg) : 'N/A';
+}
+
+// ============================================================
+// INIT
+// ============================================================
+buildTicker();
+renderPortfolio();
+renderWatchlist();
+renderComp();
+// Defer selectCar so canvas layout is calculated before Chart.js renders
+requestAnimationFrame(function() {
+  selectCar('r33-gtr');
+});
+</script>
+</body>
+</html>

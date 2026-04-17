@@ -1,0 +1,124 @@
+name: Weekly Price Update
+
+# ============================================================
+# SCHEDULE: Runs every Sunday at midnight UTC
+# You can also trigger it manually from the Actions tab
+# in GitHub by clicking "Run workflow"
+# ============================================================
+on:
+  schedule:
+    - cron: '0 0 * * 0'   # Sunday 00:00 UTC = Saturday 7pm CDT (summer)
+  workflow_dispatch:        # Manual trigger — useful for testing
+
+# ============================================================
+# PERMISSIONS
+# ============================================================
+permissions:
+  contents: write   # Needed to commit and push data.js + config changes
+
+# ============================================================
+# SECRETS REQUIRED (set in GitHub repo → Settings → Secrets)
+# ─────────────────────────────────────────────────────────
+# GH_PAT           — Personal Access Token (Contents: read/write)
+#                    Already set up from previous step.
+#
+# NETLIFY_HOOK_URL — Your Netlify Build Hook URL
+#                    Get it: Netlify → Site → Site configuration →
+#                    Build & deploy → Build hooks → Add build hook
+#                    Name it "GitHub Actions Price Update"
+#                    Copy the full URL and paste it as this secret.
+# ============================================================
+
+jobs:
+  update-prices:
+    name: Scrape Prices & Regenerate History
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Check out the repo ──────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use the PAT so the commit can trigger future workflows
+          # Create a PAT at: GitHub → Settings → Developer settings →
+          # Personal access tokens → Fine-grained tokens
+          # Give it: Contents (read & write) on this repo
+          token: ${{ secrets.GH_PAT }}
+
+      # ── 2. Set up Python ───────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: scraper/requirements.txt
+
+      # ── 3. Install scraper dependencies ───────────────────
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      # ── 4. Run the price scraper ───────────────────────────
+      - name: Scrape latest prices
+        run: python scraper/scrape_prices.py
+        env:
+          SCRAPE_DELAY_SEC: '3'   # polite delay between requests
+
+      # ── 5. Regenerate data.js + patch cars.config.js ──────
+      - name: Regenerate price history
+        run: python scraper/generate_history.py
+
+      # ── 6. Commit and push changes ─────────────────────────
+      - name: Commit updated files
+        run: |
+          git config user.name  "garage-terminal-bot"
+          git config user.email "bot@ghoststrategies.io"
+          git add frontend/data.js frontend/cars.config.js scraper/scraped_prices.json
+          # Only commit if there are actual changes
+          git diff --staged --quiet || git commit -m "chore: weekly price update $(date -u +'%Y-%m-%d')"
+
+      - name: Push changes
+        run: git push
+
+      # ── 7. Trigger Netlify redeploy ───────────────────────
+      # This fires ONLY if a commit was actually made (prices changed).
+      # Netlify will pull the latest files from GitHub and redeploy
+      # the dashboard automatically — no manual action needed.
+      - name: Trigger Netlify redeploy
+        # Only run if there were actual price changes to commit
+        # (git push would have pushed changes; if diff was empty, skip)
+        if: success()
+        run: |
+          if [ -n "${{ secrets.NETLIFY_HOOK_URL }}" ]; then
+            echo "Triggering Netlify build hook..."
+            HTTP_STATUS=$(curl -s -o /tmp/netlify_response.json -w "%{http_code}" \
+              -X POST \
+              -H "Content-Type: application/json" \
+              "${{ secrets.NETLIFY_HOOK_URL }}")
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
+              echo "Netlify build triggered successfully (HTTP $HTTP_STATUS)"
+            else
+              echo "Warning: Netlify hook returned HTTP $HTTP_STATUS"
+              cat /tmp/netlify_response.json
+              # Don't fail the workflow — prices are committed, deploy can be retried manually
+            fi
+          else
+            echo "NETLIFY_HOOK_URL secret not set — skipping auto-redeploy."
+            echo "Add the secret to enable automatic Netlify redeployment."
+          fi
+
+      # ── 8. Summary ────────────────────────────────────────
+      - name: Print summary
+        run: |
+          echo "### Price Update Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Updated: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          if [ -f scraper/scraped_prices.json ]; then
+            echo "Cars updated:" >> $GITHUB_STEP_SUMMARY
+            python3 -c "
+          import json, sys
+          data = json.load(open('scraper/scraped_prices.json'))
+          for k,v in data['prices'].items():
+              print(f'- {k}: \${v[\"avg_price\"]:,} ({v[\"confidence\"]})')
+          " >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Netlify redeploy: triggered via build hook" >> $GITHUB_STEP_SUMMARY
