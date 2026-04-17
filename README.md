@@ -292,4 +292,4 @@ MIT — use it, fork it, build on it.
 
 ---
 
-*Built with Ghost Strategies · San Antonio, TX*
+*Built with Ghost Strategies*
