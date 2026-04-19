@@ -1,0 +1,45 @@
+{
+  "scraped_at": "2026-04-19T14:11:11.230102Z",
+  "prices": {
+    "r33-gtr": {
+      "id": "r33-gtr",
+      "label": "Nissan Skyline R33 GT-R",
+      "avg_price": 77396,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-04-19T14:10:39.433092Z"
+    },
+    "r32-gtr": {
+      "id": "r32-gtr",
+      "label": "Nissan Skyline R32 GT-R",
+      "avg_price": 53401,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-04-19T14:10:45.941917Z"
+    },
+    "supra-a80": {
+      "id": "supra-a80",
+      "label": "Toyota Supra MK4 A80",
+      "avg_price": 51491,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-04-19T14:10:58.692813Z"
+    },
+    "r35-gtr": {
+      "id": "r35-gtr",
+      "label": "Nissan GT-R R35 (2020)",
+      "avg_price": 106000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-04-19T14:11:04.997689Z"
+    },
+    "huracan-sto": {
+      "id": "huracan-sto",
+      "label": "Lamborghini Hurac\u00e1n STO (2022)",
+      "avg_price": 427632,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-04-19T14:11:11.229877Z"
+    }
+  }
+}

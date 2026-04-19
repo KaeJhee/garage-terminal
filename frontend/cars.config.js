@@ -183,7 +183,7 @@ var WATCHLIST = [
   },
 
   {
-    id:         'supra-a80',
+    id:         '',
     symbol:     'SUPRAA80',
     make:       'Toyota',
     model:      'Supra MK4 A80',
@@ -191,7 +191,7 @@ var WATCHLIST = [
     category:   'JDM',
     engine:     '2JZ-GTE Twin-Turbo I6',
     power:      '320 hp (factory)',
-    avg_price:  50000,
+    avg_price:  51491,
     low_price:  30000,
     high_price: 80000,
     prev_avg:   48500,
