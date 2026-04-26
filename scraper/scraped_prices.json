@@ -1,5 +1,5 @@
 {
-  "scraped_at": "2026-04-19T14:11:11.230102Z",
+  "scraped_at": "2026-04-26T02:32:19.804889Z",
   "prices": {
     "r33-gtr": {
       "id": "r33-gtr",
@@ -7,7 +7,7 @@
       "avg_price": 77396,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-04-19T14:10:39.433092Z"
+      "scraped_at": "2026-04-26T02:31:48.433738Z"
     },
     "r32-gtr": {
       "id": "r32-gtr",
@@ -15,15 +15,15 @@
       "avg_price": 53401,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-04-19T14:10:45.941917Z"
+      "scraped_at": "2026-04-26T02:31:54.768943Z"
     },
     "supra-a80": {
       "id": "supra-a80",
       "label": "Toyota Supra MK4 A80",
-      "avg_price": 51491,
+      "avg_price": 51728,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-04-19T14:10:58.692813Z"
+      "scraped_at": "2026-04-26T02:32:07.428685Z"
     },
     "r35-gtr": {
       "id": "r35-gtr",
@@ -31,7 +31,7 @@
       "avg_price": 106000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-04-19T14:11:04.997689Z"
+      "scraped_at": "2026-04-26T02:32:13.609892Z"
     },
     "huracan-sto": {
       "id": "huracan-sto",
@@ -39,7 +39,7 @@
       "avg_price": 427632,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-04-19T14:11:11.229877Z"
+      "scraped_at": "2026-04-26T02:32:19.804669Z"
     }
   }
 }
