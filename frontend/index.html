@@ -633,6 +633,342 @@ canvas { display: block; }
   /* Bigger touch targets */
   .p-btn { padding: 5px 12px; font-size: 11px; }
 }
+
+/* ============================================================
+   DETAIL MODAL — Ticker car detail panel (slides in from right)
+   ============================================================ */
+.ticker-item { cursor: pointer; }
+.ticker-item:hover { background: rgba(232,160,32,0.06); }
+.ticker-item.wl:hover { background: rgba(232,160,32,0.16); }
+
+.dm-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(8,10,12,0.65);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.dm-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.dm-panel {
+  position: fixed;
+  top: 0; right: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100dvh;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  z-index: 1001;
+  transform: translateX(100%);
+  transition: transform 280ms ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dm-panel.open { transform: translateX(0); }
+@media (max-width: 600px) { .dm-panel { width: 100vw; } }
+
+.dm-header {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.dm-h-info { flex: 1; min-width: 0; }
+.dm-h-sym {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-h-name {
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.dm-close {
+  width: 26px; height: 26px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: all var(--t);
+}
+.dm-close:hover { border-color: var(--amber); color: var(--amber); }
+
+.dm-banner {
+  padding: 9px 16px;
+  background: rgba(58,184,110,0.10);
+  border-bottom: 1px solid rgba(58,184,110,0.4);
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--green);
+  flex-shrink: 0;
+}
+.dm-banner.show { display: flex; }
+.dm-banner-copy {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  color: var(--green);
+  flex-shrink: 0;
+  transition: all var(--t);
+  font-family: var(--font-mono);
+}
+.dm-banner-copy:hover { background: var(--green); color: var(--bg); }
+
+.dm-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dm-body::-webkit-scrollbar { width: 3px; }
+.dm-body::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.dm-price-block {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+.dm-price {
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--amber);
+  line-height: 1;
+}
+.dm-delta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.dm-delta.up { color: var(--green); }
+.dm-delta.dn { color: var(--red); }
+.dm-cat {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.dm-sec {
+  padding: 11px 16px 13px;
+  border-bottom: 1px solid var(--divider);
+}
+.dm-sec-hdr {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 8px;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.dm-sec-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  text-transform: none;
+  font-weight: 400;
+}
+
+.dm-sparkline-wrap {
+  height: 92px;
+  position: relative;
+}
+
+.dm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+.dm-row:last-child { margin-bottom: 0; }
+.dm-lbl {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dm-val {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+.dm-val.na { color: var(--text-dim); font-size: 9px; font-style: italic; }
+.dm-val.t { color: var(--teal); }
+.dm-val.a { color: var(--amber); }
+
+.dm-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* Range gauge in modal */
+.dm-gauge { margin: 4px 0 2px; }
+.dm-gauge-track {
+  height: 5px;
+  background: var(--border);
+  border-radius: 2px;
+  position: relative;
+  overflow: visible;
+}
+.dm-gauge-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+  border-radius: 2px;
+}
+.dm-gauge-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px; height: 10px;
+  background: var(--amber);
+  border-radius: 50%;
+  border: 2px solid var(--bg-panel);
+  box-shadow: 0 0 5px var(--amber-glow);
+}
+.dm-gauge-lbls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 9px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-cto-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+
+.dm-links {
+  display: flex;
+  gap: 6px;
+  padding: 11px 16px 14px;
+}
+.dm-link-btn {
+  flex: 1;
+  height: 30px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t);
+  font-family: var(--font-mono);
+}
+.dm-link-btn:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+.dm-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+.dm-action-btn {
+  flex: 1;
+  height: 36px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: all var(--t);
+  font-family: var(--font-mono);
+}
+.dm-action-btn:hover { border-color: var(--text); color: var(--text); }
+.dm-action-btn.primary {
+  background: var(--amber);
+  color: #080a0c;
+  border-color: var(--amber);
+  font-weight: 600;
+}
+.dm-action-btn.primary:hover { background: var(--amber-bright); }
+.dm-action-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--green);
+  border-color: var(--green);
+}
+.dm-action-btn:disabled:hover { background: transparent; color: var(--green); }
+
+/* Toast notification */
+.dm-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--green);
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--green);
+  border-radius: 3px;
+  z-index: 2000;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+  max-width: 320px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+.dm-toast.show { opacity: 1; transform: translateY(0); }
+@media (max-width: 600px) {
+  .dm-toast { left: 12px; right: 12px; max-width: none; }
+}
   </style>
 </head>
 <body>
@@ -779,6 +1115,95 @@ canvas { display: block; }
 </div>
 
 <!-- ============================================================
+     DETAIL MODAL — Ticker car detail panel
+     ============================================================ -->
+<div class="dm-backdrop" id="dmBackdrop" onclick="closeDetailModal()"></div>
+<aside class="dm-panel" id="dmPanel" role="dialog" aria-label="Car detail" aria-hidden="true">
+  <div class="dm-header">
+    <div class="dm-h-info">
+      <div class="dm-h-sym" id="dmSym">—</div>
+      <div class="dm-h-name" id="dmName">—</div>
+    </div>
+    <button class="dm-close" onclick="closeDetailModal()" aria-label="Close">×</button>
+  </div>
+
+  <div class="dm-banner" id="dmBanner">
+    <span id="dmBannerText">Added to watchlist.</span>
+    <button class="dm-banner-copy" onclick="copyCarConfig()">Copy config snippet</button>
+  </div>
+
+  <div class="dm-body">
+
+    <div class="dm-price-block">
+      <div>
+        <div class="dm-price" id="dmPrice">—</div>
+        <div class="dm-delta up" id="dmDelta">—</div>
+      </div>
+      <div class="dm-cat" id="dmCat">—</div>
+    </div>
+
+    <div class="dm-sec">
+      <div class="dm-sec-hdr">
+        <span>Price History</span>
+        <span class="dm-sec-sub" id="dmSparkLabel">90D</span>
+      </div>
+      <div class="dm-sparkline-wrap">
+        <canvas id="dmSparkline"></canvas>
+      </div>
+    </div>
+
+    <div class="dm-sec">
+      <div class="dm-sec-hdr">Specs</div>
+      <div class="dm-row"><span class="dm-lbl">Engine</span><span class="dm-val" id="dmEngine">—</span></div>
+      <div class="dm-row"><span class="dm-lbl">Power</span><span class="dm-val" id="dmPower">—</span></div>
+      <div class="dm-row"><span class="dm-lbl">Years</span><span class="dm-val" id="dmYears">—</span></div>
+    </div>
+
+    <div class="dm-sec">
+      <div class="dm-sec-hdr">Price Range</div>
+      <div class="dm-gauge">
+        <div class="dm-gauge-track">
+          <div class="dm-gauge-fill" id="dmGFill"></div>
+          <div class="dm-gauge-thumb" id="dmGThumb"></div>
+        </div>
+        <div class="dm-gauge-lbls">
+          <span id="dmGLow">—</span>
+          <span style="color:var(--amber)">AVG</span>
+          <span id="dmGHigh">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dm-sec">
+      <div class="dm-sec-hdr">
+        <span>Cost to Own (Year 1)</span>
+        <span class="dm-sec-sub" id="dmCtoTotal">—</span>
+      </div>
+      <div id="dmCtoBody"></div>
+    </div>
+
+    <div class="dm-sec">
+      <div class="dm-sec-hdr">Market Note</div>
+      <div class="dm-note" id="dmNote">—</div>
+    </div>
+
+    <div class="dm-links">
+      <a class="dm-link-btn" id="dmBatLink" target="_blank" rel="noopener">BaT ↗</a>
+      <a class="dm-link-btn" id="dmMarketLink" target="_blank" rel="noopener">Classic.com ↗</a>
+    </div>
+
+  </div>
+
+  <div class="dm-footer">
+    <button class="dm-action-btn" id="dmViewBtn" onclick="viewOnMainChart()">View on Main Chart</button>
+    <button class="dm-action-btn primary" id="dmMoveBtn" onclick="moveToWatchlist()">Move to Watchlist</button>
+  </div>
+</aside>
+
+<!-- Toast for status messages (e.g. "Config snippet copied") -->
+<div class="dm-toast" id="dmToast">—</div>
+
+<!-- ============================================================
      EMBEDDED DATA (no backend needed)
      ============================================================ -->
 <!-- cars.config.js is the SINGLE SOURCE OF TRUTH for all car data.
@@ -797,6 +1222,25 @@ canvas { display: block; }
 // To add a car: edit frontend/cars.config.js only.
 // ============================================================
 
+// Merge user-promoted cars from localStorage into WATCHLIST BEFORE
+// computing deltas. cars.config.js takes precedence on id collision.
+(function loadUserWatchlist() {
+  try {
+    var raw = localStorage.getItem('garage_terminal_user_watchlist');
+    if (!raw) return;
+    var userCars = JSON.parse(raw);
+    if (!Array.isArray(userCars)) return;
+    userCars.forEach(function(uc) {
+      if (!uc || !uc.id) return;
+      if (!WATCHLIST.find(function(c) { return c.id === uc.id; })) {
+        WATCHLIST.push(uc);
+      }
+    });
+  } catch(e) {
+    console.warn('Garage Terminal: failed to load user watchlist:', e);
+  }
+})();
+
 // Compute deltas from cars.config.js data and overwrite the global.
 // WATCHLIST is already declared as 'var' in cars.config.js — we just
 // reassign it here with computed fields. No redeclaration needed.
@@ -813,13 +1257,19 @@ WATCHLIST = WATCHLIST.map(function(c) {
 // ============================================================
 // DERIVE TICKER_DATA FROM cars.config.js (TICKER_UNIVERSE)
 // ============================================================
+// TICKER_UNIVERSE now uses the same full schema as WATCHLIST.
+// We derive flat ticker fields (symbol/name/price/change) and
+// keep the id so click handlers can resolve back to the full car.
 var TICKER_DATA = TICKER_UNIVERSE.map(function(t) {
+  var delta     = t.avg_price - t.prev_avg;
+  var delta_pct = (delta / t.prev_avg) * 100;
   return {
+    id:        t.id,
     symbol:    t.symbol,
-    name:      t.name,
-    price:     t.price,
-    change:    t.change,
-    direction: t.change >= 0 ? 'up' : 'down',
+    name:      t.model,
+    price:     t.avg_price,
+    change:    delta_pct,
+    direction: delta_pct >= 0 ? 'up' : 'down',
   };
 });
 
@@ -850,22 +1300,30 @@ setInterval(tick,1000); tick();
 // TICKER
 // ============================================================
 function buildTicker() {
-  // Interleave watchlist cars
+  // Build set of WL ids so a promoted ticker car doesn't show up twice
+  // (once as a WL entry and again from TICKER_DATA)
+  const wlIds = {};
+  WATCHLIST.forEach(c => { wlIds[c.id] = true; });
+  const availableTicker = TICKER_DATA.filter(t => !wlIds[t.id]);
+
+  // Interleave watchlist cars with ticker universe (3 ticker per WL row)
   const items = [];
+  const stride = 3;
   WATCHLIST.forEach((w,i) => {
-    const arrow = w.delta_dir==='up'?'▲':'▼';
-    items.push({symbol:w.symbol, name:w.model, price:w.avg_price, change:w.delta_pct, direction:w.delta_dir, wl:true});
-    if (TICKER_DATA[i*3]) items.push(TICKER_DATA[i*3]);
-    if (TICKER_DATA[i*3+1]) items.push(TICKER_DATA[i*3+1]);
-    if (TICKER_DATA[i*3+2]) items.push(TICKER_DATA[i*3+2]);
+    items.push({id:w.id, symbol:w.symbol, name:w.model, price:w.avg_price, change:w.delta_pct, direction:w.delta_dir, wl:true});
+    for (let k = 0; k < stride; k++) {
+      const idx = i*stride + k;
+      if (availableTicker[idx]) items.push(availableTicker[idx]);
+    }
   });
-  // Add remaining
-  items.push(...TICKER_DATA.slice(15));
+  // Append any ticker cars not yet placed (handles >5 WL cars cleanly)
+  items.push(...availableTicker.slice(WATCHLIST.length * stride));
 
   const html = items.map(it => {
-    const cls = it.direction==='up'?'up':'dn';
+    const cls   = it.direction==='up'?'up':'dn';
     const arrow = it.direction==='up'?'▲':'▼';
-    return `<div class="ticker-item${it.wl?' wl':''}">
+    const safeId = (it.id || '').replace(/'/g, "\\'");
+    return `<div class="ticker-item${it.wl?' wl':''}" data-id="${it.id||''}" onclick="viewTickerCar('${safeId}')">
       <span class="t-sym">${it.symbol}</span>
       <span class="t-price">${fmt(it.price)}</span>
       <span class="t-chg ${cls}">${arrow} ${fmtPct(it.change)}</span>
@@ -1214,8 +1672,426 @@ function renderPortfolio() {
 }
 
 // ============================================================
+// DETAIL MODAL — Ticker car preview with sparkline + actions
+// ============================================================
+
+// Currently-active modal car id (set when modal opens)
+var activeModalCarId = null;
+var sparklineChart   = null;
+var USER_WATCHLIST_KEY = 'garage_terminal_user_watchlist';
+
+// Find a car by id across WATCHLIST and TICKER_UNIVERSE
+function findCarById(id) {
+  return WATCHLIST.find(function(c) { return c.id === id; })
+      || TICKER_UNIVERSE.find(function(c) { return c.id === id; })
+      || null;
+}
+
+// Seeded RNG so generated histories are deterministic per car
+function seededRandom(seed) {
+  var s = seed | 0;
+  if (s <= 0) s = 1;
+  return function() {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+// Generate 365 days of {date, price, volume} for any car (same shape as data.js).
+// Mean-reverting walk anchored to avg_price as the endpoint, with occasional spikes.
+// Mirrors the algorithm in scraper/generate_history.py for visual consistency.
+function generateBakedHistory(symbol, basePrice) {
+  // Symbol-based seed so each car has its own shape; weekly drift refreshes it.
+  var seed = 0;
+  for (var i = 0; i < symbol.length; i++) seed += symbol.charCodeAt(i) * (i+1);
+  var weekIndex = Math.floor(Date.now() / (7*24*60*60*1000));
+  seed = (seed * 7919 + weekIndex) | 0;
+
+  var rng = seededRandom(seed);
+  var startMult = 0.88 + rng() * 0.12;
+  var price = basePrice * startMult;
+
+  var today = new Date();
+  var history = [];
+  for (var d = 0; d < 365; d++) {
+    var pull  = (basePrice - price) * 0.012;
+    var noise = (rng() - 0.5) * basePrice * 0.025;
+    if (rng() < 0.025) noise *= 3.2;        // occasional auction spike
+    price = price + pull + noise;
+    if (price < basePrice * 0.55) price = basePrice * 0.55;
+    if (price > basePrice * 1.40) price = basePrice * 1.40;
+
+    var dt  = new Date(today.getTime() - (364 - d) * 86400000);
+    var iso = dt.toISOString().slice(0, 10);
+
+    history.push({
+      date:   iso,
+      price:  Math.round(price),
+      volume: Math.floor(rng() * 14) + 1,
+    });
+  }
+  history[history.length - 1].price = basePrice; // anchor endpoint
+  return history;
+}
+
+// Ensure BAKED_HISTORY[car.id] exists. No-op if already populated by data.js.
+function ensureHistory(car) {
+  if (!car || !car.id) return;
+  if (typeof BAKED_HISTORY === 'undefined') return;
+  if (BAKED_HISTORY[car.id] && BAKED_HISTORY[car.id].length) return;
+  BAKED_HISTORY[car.id] = generateBakedHistory(car.symbol, car.avg_price);
+}
+
+function renderSparkline(canvasId, prices, dates, color) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  if (sparklineChart) { sparklineChart.destroy(); sparklineChart = null; }
+
+  var grad = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 92);
+  grad.addColorStop(0, color + '55');
+  grad.addColorStop(1, color + '00');
+
+  sparklineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dates || prices.map(function(_, i) { return i; }),
+      datasets: [{
+        data: prices,
+        borderColor: color,
+        borderWidth: 1.4,
+        backgroundColor: grad,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: color,
+        pointHoverBorderColor: '#080a0c',
+        pointHoverBorderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          backgroundColor: '#111418',
+          borderColor: '#2a2f36',
+          borderWidth: 1,
+          titleColor: '#e8a020',
+          titleFont: { family: 'JetBrains Mono, monospace', size: 9, weight: '500' },
+          bodyColor: '#e6e6e6',
+          bodyFont: { family: 'JetBrains Mono, monospace', size: 11 },
+          padding: 8,
+          displayColors: false,
+          callbacks: {
+            title: function(items) { return items[0].label || ''; },
+            label: function(item) {
+              return '$' + Number(item.parsed.y).toLocaleString('en-US');
+            }
+          }
+        }
+      },
+      scales: { x: { display: false }, y: { display: false } },
+      animation: { duration: 350 },
+      elements: { point: { radius: 0 } },
+    }
+  });
+}
+
+// Open the detail modal for a given car id (from ticker or watchlist)
+function viewTickerCar(id) {
+  if (!id) return;
+  var car = findCarById(id);
+  if (!car) { console.warn('Garage Terminal: car not found:', id); return; }
+  activeModalCarId = id;
+
+  var delta     = car.avg_price - car.prev_avg;
+  var delta_pct = (delta / car.prev_avg) * 100;
+  var up        = delta >= 0;
+
+  // Header
+  document.getElementById('dmSym').textContent  = car.symbol + ' · ' + car.category + ' · ' + car.years;
+  document.getElementById('dmName').textContent = car.model;
+  document.getElementById('dmCat').textContent  = (car.make || '').toUpperCase();
+
+  // Price + delta
+  document.getElementById('dmPrice').textContent = fmt(car.avg_price);
+  var dEl = document.getElementById('dmDelta');
+  dEl.textContent = (up ? '▲ +' : '▼ ') + fmt(Math.abs(delta)) + ' (' + fmtPct(delta_pct) + ')';
+  dEl.className   = 'dm-delta ' + (up ? 'up' : 'dn');
+
+  // Sparkline (must be drawn after modal opens so canvas has dimensions).
+  // Uses the same BAKED_HISTORY that the main chart uses, so sparkline + main
+  // chart show consistent data when the user later promotes the car.
+  var hadHistory = !!(typeof BAKED_HISTORY !== 'undefined' && BAKED_HISTORY[id] && BAKED_HISTORY[id].length);
+  ensureHistory(car);
+  var color = car.color || '#e8a020';
+  requestAnimationFrame(function() {
+    var full   = (typeof BAKED_HISTORY !== 'undefined' && BAKED_HISTORY[id]) || [];
+    var slice  = full.slice(-90);
+    var prices = slice.map(function(d) { return d.price; });
+    var dates  = slice.map(function(d) { return d.date; });
+    if (!prices.length) {
+      prices = [car.avg_price, car.avg_price];
+      dates  = ['', ''];
+    }
+    // Update label based on data source: real (data.js) vs client-generated
+    var lbl = document.getElementById('dmSparkLabel');
+    if (lbl) lbl.textContent = '90D · ' + (hadHistory ? 'history' : 'preview');
+    renderSparkline('dmSparkline', prices, dates, color);
+  });
+
+  // Specs
+  document.getElementById('dmEngine').textContent = car.engine || '—';
+  document.getElementById('dmPower').textContent  = car.power  || '—';
+  document.getElementById('dmYears').textContent  = car.years  || '—';
+
+  // Range gauge
+  var range = (car.high_price || 0) - (car.low_price || 0);
+  var pct   = range > 0
+    ? Math.min(Math.max(((car.avg_price - car.low_price) / range) * 100, 2), 98)
+    : 50;
+  document.getElementById('dmGFill').style.width = pct + '%';
+  document.getElementById('dmGThumb').style.left = pct + '%';
+  document.getElementById('dmGLow').textContent  = fmtK(car.low_price  || 0);
+  document.getElementById('dmGHigh').textContent = fmtK(car.high_price || 0);
+
+  // Cost to own
+  renderModalCto(car);
+
+  // Note
+  document.getElementById('dmNote').textContent = car.note || '—';
+
+  // Links
+  document.getElementById('dmBatLink').href     = car.bat_url    || '#';
+  document.getElementById('dmMarketLink').href  = car.market_url || '#';
+
+  // Footer button states
+  var inWatchlist = WATCHLIST.some(function(c) {
+    return c.id === id && !c.__sessionOnly;
+  });
+  var moveBtn = document.getElementById('dmMoveBtn');
+  if (inWatchlist) {
+    moveBtn.textContent = '✓ In Watchlist';
+    moveBtn.disabled    = true;
+  } else {
+    moveBtn.textContent = 'Move to Watchlist';
+    moveBtn.disabled    = false;
+  }
+
+  // Hide any previous banner
+  document.getElementById('dmBanner').classList.remove('show');
+
+  // Open modal
+  document.getElementById('dmBackdrop').classList.add('open');
+  var panel = document.getElementById('dmPanel');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+}
+
+function renderModalCto(car) {
+  var cto     = car.cost_to_own;
+  var body    = document.getElementById('dmCtoBody');
+  var totalEl = document.getElementById('dmCtoTotal');
+  if (!cto) {
+    body.innerHTML = '<div class="dm-row"><span class="dm-lbl">No data</span><span class="dm-val na">—</span></div>';
+    totalEl.textContent = '—';
+    return;
+  }
+  var trueAcq = car.avg_price + (cto.total_first_year_extra || 0);
+  totalEl.textContent = 'TRUE ACQ ' + fmtK(trueAcq);
+
+  var rows = [];
+  rows.push('<div class="dm-row"><span class="dm-lbl">Insurance</span><span class="dm-val t">' + fmt(cto.insurance_annual) + '/yr</span></div>');
+  rows.push('<div class="dm-row"><span class="dm-lbl">Maintenance</span><span class="dm-val t">' + fmt(cto.maintenance_annual) + '/yr</span></div>');
+  if (cto.import_duty_pct > 0) {
+    rows.push('<div class="dm-row"><span class="dm-lbl">Import Duty</span><span class="dm-val">' + fmt(cto.import_duty_est) + ' (' + (cto.import_duty_pct*100).toFixed(1) + '%)</span></div>');
+    rows.push('<div class="dm-row"><span class="dm-lbl">Shipping (JP→US)</span><span class="dm-val">' + fmt(cto.shipping_est) + '</span></div>');
+  } else {
+    rows.push('<div class="dm-row"><span class="dm-lbl">Import / Ship</span><span class="dm-val na">N/A · US Spec</span></div>');
+  }
+  rows.push('<div class="dm-cto-total-row"><span class="dm-lbl">Yr 1 Total</span><span class="dm-val a">' + fmt(cto.total_first_year_extra) + '</span></div>');
+  body.innerHTML = rows.join('');
+}
+
+function closeDetailModal() {
+  document.getElementById('dmBackdrop').classList.remove('open');
+  var panel = document.getElementById('dmPanel');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  activeModalCarId = null;
+  if (sparklineChart) { sparklineChart.destroy(); sparklineChart = null; }
+}
+
+// ESC closes modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && activeModalCarId) closeDetailModal();
+});
+
+// ============================================================
+// VIEW ON MAIN CHART — switches main chart to ticker car (session only)
+// ============================================================
+function viewOnMainChart() {
+  var id = activeModalCarId;
+  if (!id) return;
+
+  // If not already in WATCHLIST, add as a session-only entry so the
+  // existing chart/comparison/etc code finds it via WATCHLIST.find()
+  if (!WATCHLIST.find(function(c) { return c.id === id; })) {
+    var car = findCarById(id);
+    if (!car) return;
+    var delta     = car.avg_price - car.prev_avg;
+    var delta_pct = (delta / car.prev_avg) * 100;
+    var enriched  = Object.assign({}, car, {
+      delta:     delta,
+      delta_pct: delta_pct,
+      delta_dir: delta >= 0 ? 'up' : 'down',
+      __sessionOnly: true,
+    });
+    WATCHLIST.push(enriched);
+    ensureHistory(enriched);  // populate BAKED_HISTORY for main chart
+    renderWatchlist();
+    renderComp();
+    renderPortfolio();
+    buildTicker();
+  } else {
+    // Already there — but make sure history exists (e.g. localStorage car)
+    ensureHistory(WATCHLIST.find(function(c) { return c.id === id; }));
+  }
+
+  selectCar(id);
+  closeDetailModal();
+}
+
+// ============================================================
+// MOVE TO WATCHLIST — promotes ticker car to permanent watchlist
+// (persists in localStorage; offers config snippet for cars.config.js)
+// ============================================================
+function moveToWatchlist() {
+  var id = activeModalCarId;
+  if (!id) return;
+  var car = TICKER_UNIVERSE.find(function(c) { return c.id === id; });
+  if (!car) return;
+
+  // Save to localStorage
+  var stored = [];
+  try {
+    var raw = localStorage.getItem(USER_WATCHLIST_KEY);
+    if (raw) stored = JSON.parse(raw) || [];
+  } catch(e) { stored = []; }
+
+  if (!stored.find(function(c) { return c.id === id; })) {
+    stored.push(car);
+    try {
+      localStorage.setItem(USER_WATCHLIST_KEY, JSON.stringify(stored));
+    } catch(e) {
+      console.warn('Garage Terminal: could not save to localStorage:', e);
+    }
+  }
+
+  // Remove any session-only copy and add the permanent one
+  WATCHLIST = WATCHLIST.filter(function(c) { return c.id !== id; });
+  var delta     = car.avg_price - car.prev_avg;
+  var delta_pct = (delta / car.prev_avg) * 100;
+  var enriched  = Object.assign({}, car, {
+    delta:     delta,
+    delta_pct: delta_pct,
+    delta_dir: delta >= 0 ? 'up' : 'down',
+  });
+  WATCHLIST.push(enriched);
+  ensureHistory(enriched);  // populate BAKED_HISTORY for main chart
+
+  renderWatchlist();
+  renderComp();
+  renderPortfolio();
+  buildTicker();
+  selectCar(id);
+
+  // Update modal: show banner with snippet copy, lock the Move button
+  document.getElementById('dmBannerText').textContent = 'Added to watchlist (this browser).';
+  document.getElementById('dmBanner').classList.add('show');
+  var moveBtn = document.getElementById('dmMoveBtn');
+  moveBtn.textContent = '✓ In Watchlist';
+  moveBtn.disabled    = true;
+}
+
+// ============================================================
+// COPY CONFIG SNIPPET — copies the cars.config.js entry block
+// User can paste into cars.config.js WATCHLIST array to make it permanent
+// ============================================================
+function copyCarConfig() {
+  var id = activeModalCarId;
+  if (!id) return;
+  var car = TICKER_UNIVERSE.find(function(c) { return c.id === id; })
+         || WATCHLIST.find(function(c) { return c.id === id; });
+  if (!car) return;
+
+  var cto = car.cost_to_own || {};
+  var snippet =
+    '  {\n' +
+    '    id:         ' + JSON.stringify(car.id) + ',\n' +
+    '    symbol:     ' + JSON.stringify(car.symbol) + ',\n' +
+    '    make:       ' + JSON.stringify(car.make) + ',\n' +
+    '    model:      ' + JSON.stringify(car.model) + ',\n' +
+    '    years:      ' + JSON.stringify(car.years) + ',\n' +
+    '    category:   ' + JSON.stringify(car.category) + ',\n' +
+    '    engine:     ' + JSON.stringify(car.engine) + ',\n' +
+    '    power:      ' + JSON.stringify(car.power) + ',\n' +
+    '    avg_price:  ' + (car.avg_price || 0) + ',\n' +
+    '    low_price:  ' + (car.low_price || 0) + ',\n' +
+    '    high_price: ' + (car.high_price || 0) + ',\n' +
+    '    prev_avg:   ' + (car.prev_avg || 0) + ',\n' +
+    '    color:      ' + JSON.stringify(car.color) + ',\n' +
+    '    note:       ' + JSON.stringify(car.note || '') + ',\n' +
+    '    bat_url:    ' + JSON.stringify(car.bat_url || '') + ',\n' +
+    '    market_url: ' + JSON.stringify(car.market_url || '') + ',\n' +
+    '    cost_to_own: {\n' +
+    '      insurance_annual:       ' + (cto.insurance_annual || 0) + ',\n' +
+    '      insurance_note:         ' + JSON.stringify(cto.insurance_note || '') + ',\n' +
+    '      import_duty_pct:        ' + (cto.import_duty_pct || 0) + ',\n' +
+    '      import_duty_est:        ' + (cto.import_duty_est || 0) + ',\n' +
+    '      shipping_est:           ' + (cto.shipping_est || 0) + ',\n' +
+    '      maintenance_annual:     ' + (cto.maintenance_annual || 0) + ',\n' +
+    '      maintenance_note:       ' + JSON.stringify(cto.maintenance_note || '') + ',\n' +
+    '      total_first_year_extra: ' + (cto.total_first_year_extra || 0) + ',\n' +
+    '    },\n' +
+    '  },';
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(snippet).then(function() {
+      showToast('Config snippet copied. Paste into cars.config.js WATCHLIST array.');
+    }).catch(function() {
+      showToast('Copy failed. Check console for snippet.');
+      console.log('Garage Terminal — config snippet for ' + car.symbol + ':\n' + snippet);
+    });
+  } else {
+    showToast('Clipboard unavailable. Snippet logged to console.');
+    console.log('Garage Terminal — config snippet for ' + car.symbol + ':\n' + snippet);
+  }
+}
+
+function showToast(msg) {
+  var t = document.getElementById('dmToast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function() {
+    t.classList.remove('show');
+  }, 4000);
+}
+
+// ============================================================
 // INIT
 // ============================================================
+// Populate BAKED_HISTORY for any user-promoted cars loaded from localStorage.
+// (cars.config.js cars already have history baked in via data.js)
+WATCHLIST.forEach(function(c) { ensureHistory(c); });
+
 buildTicker();
 renderPortfolio();
 renderWatchlist();
