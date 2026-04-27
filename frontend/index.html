@@ -161,9 +161,68 @@ canvas { display: block; }
   will-change: transform;
 }
 .ticker-wrapper:hover .ticker-scroll { animation-play-state: paused; }
+.ticker-scroll.filtering { animation-play-state: paused; }
 @keyframes ticker-move {
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
+}
+
+/* Ticker search */
+.ticker-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 12px;
+  border-left: 1px solid var(--divider);
+  background: var(--bg-panel);
+  min-width: 180px;
+}
+.ticker-search .ts-icon {
+  color: var(--accent-amber);
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.7;
+}
+.ticker-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-bright);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 0;
+  min-width: 0;
+}
+.ticker-search input::placeholder {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.5;
+}
+.ticker-search input:focus + .ts-clear { display: block; }
+.ticker-search.has-value .ts-clear { display: block; }
+.ticker-search .ts-clear {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  font-family: inherit;
+}
+.ticker-search .ts-clear:hover { color: var(--accent-red); }
+
+.ticker-item.filter-hide { display: none !important; }
+.wl-row.filter-hide { display: none !important; }
+
+@media (max-width: 768px) {
+  .ticker-search { min-width: 120px; padding: 0 8px; }
 }
 .ticker-item {
   display: inline-flex;
@@ -998,6 +1057,11 @@ canvas { display: block; }
   <div class="ticker-track">
     <div class="ticker-scroll" id="tickerScroll"></div>
   </div>
+  <div class="ticker-search">
+    <span class="ts-icon">⌕</span>
+    <input id="tickerSearch" type="text" placeholder="filter" autocomplete="off" spellcheck="false" />
+    <button id="tickerSearchClear" class="ts-clear" type="button" aria-label="Clear filter">×</button>
+  </div>
 </div>
 
 <!-- BODY -->
@@ -1286,6 +1350,88 @@ const fmtPct= n => (n>=0?'+':'')+Number(n).toFixed(2)+'%';
 let activeId = 'r33-gtr';
 let activePeriod = '1Y';
 let chart = null;
+let currentTickerFilter = '';
+
+// ============================================================
+// TICKER SEARCH / FILTER
+// ============================================================
+// Filters both the scrolling ticker tape AND the watchlist sidebar
+// against symbol, id, make, model, category, years.
+// Uses CSS class 'filter-hide' so animation state isn't disturbed.
+function applyTickerFilter(query) {
+  const q = String(query || '').trim().toLowerCase();
+  currentTickerFilter = q;
+  const wrap = document.querySelector('.ticker-search');
+  const scrollEl = document.getElementById('tickerScroll');
+
+  if (!q) {
+    // Clear filter: show everything, resume scroll animation
+    document.querySelectorAll('.ticker-item.filter-hide, .wl-row.filter-hide')
+      .forEach(el => el.classList.remove('filter-hide'));
+    if (wrap) wrap.classList.remove('has-value');
+    if (scrollEl) scrollEl.classList.remove('filtering');
+    return;
+  }
+
+  // Tokenize on whitespace - all tokens must match (AND semantics)
+  const tokens = q.split(/\s+/).filter(Boolean);
+
+  let matchCount = 0;
+  document.querySelectorAll('.ticker-item').forEach(el => {
+    const hay = el.getAttribute('data-search') || '';
+    const hit = tokens.every(t => hay.includes(t));
+    el.classList.toggle('filter-hide', !hit);
+    if (hit) matchCount++;
+  });
+  document.querySelectorAll('.wl-row').forEach(el => {
+    const hay = el.getAttribute('data-search') || '';
+    el.classList.toggle('filter-hide', !tokens.every(t => hay.includes(t)));
+  });
+
+  if (wrap) wrap.classList.add('has-value');
+  // Pause the scroll animation while filtering so matches stay visible
+  // (otherwise they'd scroll past your cursor)
+  if (scrollEl) scrollEl.classList.add('filtering');
+}
+
+function clearTickerFilter() {
+  const input = document.getElementById('tickerSearch');
+  if (input) input.value = '';
+  applyTickerFilter('');
+}
+
+// Wire input + clear button + Esc key
+function wireTickerSearch() {
+  const input = document.getElementById('tickerSearch');
+  const clearBtn = document.getElementById('tickerSearchClear');
+  if (!input) return;
+
+  input.addEventListener('input', function(e) {
+    applyTickerFilter(e.target.value);
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      clearTickerFilter();
+      input.blur();
+    }
+  });
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() {
+      clearTickerFilter();
+      input.focus();
+    });
+  }
+  // Slash key (/) anywhere on the page focuses the filter,
+  // unless the user is already typing in another input
+  document.addEventListener('keydown', function(e) {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT' &&
+        document.activeElement.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
+}
 
 // ============================================================
 // CLOCK
@@ -1323,7 +1469,11 @@ function buildTicker() {
     const cls   = it.direction==='up'?'up':'dn';
     const arrow = it.direction==='up'?'▲':'▼';
     const safeId = (it.id || '').replace(/'/g, "\\'");
-    return `<div class="ticker-item${it.wl?' wl':''}" data-id="${it.id||''}" onclick="viewTickerCar('${safeId}')">
+    // Build a searchable haystack: symbol, make, model, category, years
+    const car  = findCarById(it.id) || {};
+    const meta = [it.symbol, it.id, car.make, car.model, car.category, car.years]
+      .filter(Boolean).join(' ').toLowerCase();
+    return `<div class="ticker-item${it.wl?' wl':''}" data-id="${it.id||''}" data-search="${meta}" onclick="viewTickerCar('${safeId}')">
       <span class="t-sym">${it.symbol}</span>
       <span class="t-price">${fmt(it.price)}</span>
       <span class="t-chg ${cls}">${arrow} ${fmtPct(it.change)}</span>
@@ -1332,6 +1482,9 @@ function buildTicker() {
 
   const el = document.getElementById('tickerScroll');
   el.innerHTML = html + html; // duplicate for seamless loop
+
+  // Re-apply any active filter so filter state survives re-renders
+  if (currentTickerFilter) applyTickerFilter(currentTickerFilter);
 }
 
 // ============================================================
@@ -1340,12 +1493,16 @@ function buildTicker() {
 function renderWatchlist() {
   document.getElementById('watchlistRows').innerHTML = WATCHLIST.map(c => {
     const up = c.delta_dir==='up';
-    return `<div class="wl-row${c.id===activeId?' active':''}" onclick="selectCar('${c.id}')">
+    const meta = [c.symbol, c.id, c.make, c.model, c.category, c.years]
+      .filter(Boolean).join(' ').toLowerCase();
+    return `<div class="wl-row${c.id===activeId?' active':''}" data-id="${c.id}" data-search="${meta}" onclick="selectCar('${c.id}')">
       <span class="wl-sym">${c.symbol}</span>
       <span class="wl-price">${fmtK(c.avg_price)}</span>
       <span class="wl-delta ${up?'up':'dn'}">${up?'▲':'▼'}${Math.abs(c.delta_pct).toFixed(1)}%</span>
     </div>`;
   }).join('');
+
+  if (currentTickerFilter) applyTickerFilter(currentTickerFilter);
 }
 
 // ============================================================
@@ -2096,6 +2253,7 @@ buildTicker();
 renderPortfolio();
 renderWatchlist();
 renderComp();
+wireTickerSearch();
 // Defer selectCar so canvas layout is calculated before Chart.js renders
 requestAnimationFrame(function() {
   selectCar('r33-gtr');
