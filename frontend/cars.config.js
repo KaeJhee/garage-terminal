@@ -11,95 +11,53 @@
  * 4. Pick a unique color from CHART_COLORS
  * 5. Save the file and refresh the dashboard
  *
- * The dashboard automatically picks up all cars in WATCHLIST —
- * no other files need to be changed.
+ * The dashboard automatically picks up all cars in WATCHLIST.
+ * No other files need to be changed.
+ *
+ * ============================================================
+ * TICKER_UNIVERSE — Now uses the SAME schema as WATCHLIST
+ * ============================================================
+ *
+ * Every ticker car has full detail (engine, power, cost_to_own,
+ * BaT/Classic.com URLs) so it can be promoted to the watchlist
+ * via the dashboard's "Move to Watchlist" button.
  *
  * ============================================================
  * FIELD REFERENCE
  * ============================================================
  *
- * id          → Unique slug, lowercase, hyphens only. Used as key everywhere.
- *               Examples: "nsx-na1", "evo-ix", "gt3rs-992"
- *
- * symbol      → Ticker-style label shown in the sidebar and ticker tape.
- *               6–8 chars, uppercase, no spaces.
- *               Examples: "NSXNA1", "EVOIX", "GT3RS992"
- *
- * make        → Manufacturer name. Examples: "Honda", "Porsche"
- *
- * model       → Full display name shown as the chart title.
- *               Examples: "NSX NA1", "Porsche 911 GT3 RS (992)"
- *
- * years       → Production years shown in the header.
- *               Examples: "1990–2005", "2023", "2019–2021"
- *
- * category    → One of: "JDM" | "Modern" | "Exotic" | "Muscle" | "European"
- *               Controls which KPI bucket the car falls into.
- *
- * engine      → Engine description for the specs strip.
- *               Examples: "C32B VTEC V6", "4.0L Flat-6 NA"
- *
- * power       → Power output string shown in specs.
- *               Examples: "290 hp", "500 hp (factory)"
- *
- * avg_price   → Current average market price in USD (integer).
- *               Source this from classic.com, BaT recent results, or KBB.
- *
- * low_price   → Realistic entry-level price (not a basket case).
- *               This sets the left end of the price range gauge.
- *
- * high_price  → Top of the typical price range (not a record outlier).
- *               This sets the right end of the price range gauge.
- *
- * prev_avg    → Previous period's average price (used to calculate ▲/▼ delta).
- *               If you don't have this, set it 3–8% below avg_price for an up trend,
- *               or 1–3% above for a down trend.
- *
- * color       → Hex color for this car's chart line and comparison dot.
- *               Pick from CHART_COLORS below, or any distinct hex.
- *               Avoid colors already used by other cars.
- *
- * note        → One-sentence market insight shown in the specs strip.
- *               Keep under 120 characters.
- *
- * bat_url     → Link to active listings (Bring a Trailer, Cars.com, Edmunds, etc.)
- *               This powers the "Listings ↗" button.
- *
- * market_url  → Link to market data page (classic.com, KBB, CarGurus, etc.)
- *               This powers the "Market ↗" button.
- *
- * cost_to_own → Object with estimated first-year ownership costs beyond purchase price.
- *               Used by the Cost-to-Own panel on each car card.
- *
- *   insurance_annual    → Annual specialty/classic insurance estimate (USD integer).
- *                         JDM classics → Hagerty/Grundy rates. US-spec → standard market.
- *   insurance_note      → Short note on insurance type or provider basis.
- *
- *   import_duty_pct     → Import duty rate as decimal (e.g. 0.025 = 2.5%).
- *                         US-spec or domestic cars: set to 0.
- *   import_duty_est     → Estimated duty dollar amount (integer).
- *                         = avg_price × import_duty_pct. Set to 0 for US-spec.
- *   shipping_est        → Estimated shipping cost from Japan to US West Coast (integer).
- *                         Typically $3,050–$5,500 flat. Set to 0 for US-spec.
- *
- *   maintenance_annual  → Estimated annual maintenance cost (USD integer).
- *                         Includes oil changes, service intervals, wear items.
- *   maintenance_note    → Short note on what's covered or why the estimate is set.
- *
- *   total_first_year_extra → Sum of all above one-time + first-year recurring costs.
- *                            = import_duty_est + shipping_est + insurance_annual + maintenance_annual
+ * id          -> Unique slug, lowercase, hyphens only.
+ * symbol      -> Ticker label, 6-8 chars, uppercase, no spaces.
+ * make        -> Manufacturer name.
+ * model       -> Full display name on the chart.
+ * years       -> Production years, e.g. "1995-1998".
+ * category    -> "JDM" | "Modern" | "Exotic" | "Muscle" | "European"
+ * engine      -> Engine description.
+ * power       -> Power output string.
+ * avg_price   -> Current average market price USD (integer).
+ * low_price   -> Realistic entry-level price.
+ * high_price  -> Top of typical range.
+ * prev_avg    -> Previous period's average (for delta calc).
+ * color       -> Hex color or CHART_COLORS.<name>.
+ * note        -> One-sentence market insight.
+ * bat_url     -> Link to active listings.
+ * market_url  -> Link to market data.
+ * cost_to_own -> Object with first-year ownership costs:
+ *   insurance_annual, insurance_note,
+ *   import_duty_pct, import_duty_est, shipping_est,
+ *   maintenance_annual, maintenance_note,
+ *   total_first_year_extra
  *
  * ============================================================
- * CHART COLORS — pick one per car, keep them visually distinct
+ * CHART COLORS
  * ============================================================
  */
 var CHART_COLORS = {
-  amber:   '#e8a020',   // ← R33 GTR (in use)
-  teal:    '#3cb8c0',   // ← R32 GTR (in use)
-  green:   '#3ab86e',   // ← Supra A80 (in use)
-  blue:    '#4b8ef5',   // ← R35 GTR (in use)
-  purple:  '#a06ef0',   // ← Huracán STO (in use)
-  // --- Available ---
+  amber:   '#e8a020',   // R33 GTR (in use)
+  teal:    '#3cb8c0',   // R32 GTR (in use)
+  green:   '#3ab86e',   // Supra A80 (in use)
+  blue:    '#4b8ef5',   // R35 GTR (in use)
+  purple:  '#a06ef0',   // Huracan STO (in use)
   orange:  '#f5804b',
   pink:    '#f06ea0',
   cyan:    '#22d3ee',
@@ -114,21 +72,18 @@ var CHART_COLORS = {
 
 /**
  * ============================================================
- * WATCHLIST — Cars shown in the sidebar and on the chart
+ * WATCHLIST - Cars shown in the sidebar and on the main chart
  * ============================================================
- *
- * Add or remove cars here. The dashboard auto-adjusts.
- * Maximum recommended: 12 cars (sidebar gets crowded above that).
  */
 var WATCHLIST = [
 
-  // ─── DREAM CAR ─────────────────────────────────────────
+  // DREAM CAR
   {
     id:         'r33-gtr',
     symbol:     'R33GTR',
     make:       'Nissan',
     model:      'Skyline R33 GT-R',
-    years:      '1995–1998',
+    years:      '1995-1998',
     category:   'JDM',
     engine:     'RB26DETT Twin-Turbo I6',
     power:      '276 hp (underrated)',
@@ -137,7 +92,7 @@ var WATCHLIST = [
     high_price: 120000,
     prev_avg:   74200,
     color:      CHART_COLORS.amber,
-    note:       'V-Spec variants command premium. Watch for V-Spec II Nür.',
+    note:       'V-Spec variants command premium. Watch for V-Spec II Nur.',
     bat_url:    'https://bringatrailer.com/search/?s=r33+gt-r',
     market_url: 'https://www.classic.com/m/nissan/skyline/r33/gt-r/',
     cost_to_own: {
@@ -152,13 +107,13 @@ var WATCHLIST = [
     },
   },
 
-  // ─── JDM LEGENDS ───────────────────────────────────────
+  // JDM LEGENDS
   {
     id:         'r32-gtr',
     symbol:     'R32GTR',
     make:       'Nissan',
     model:      'Skyline R32 GT-R',
-    years:      '1989–1994',
+    years:      '1989-1994',
     category:   'JDM',
     engine:     'RB26DETT Twin-Turbo I6',
     power:      '276 hp (factory)',
@@ -187,7 +142,7 @@ var WATCHLIST = [
     symbol:     'SUPRAA80',
     make:       'Toyota',
     model:      'Supra MK4 A80',
-    years:      '1993–2002',
+    years:      '1993-2002',
     category:   'JDM',
     engine:     '2JZ-GTE Twin-Turbo I6',
     power:      '320 hp (factory)',
@@ -206,12 +161,12 @@ var WATCHLIST = [
       import_duty_est:        1250,
       shipping_est:           4500,
       maintenance_annual:     900,
-      maintenance_note:       '2JZ-GTE turbo service; RepairPal est. $561–$810/yr',
+      maintenance_note:       '2JZ-GTE turbo service; RepairPal est. $561-$810/yr',
       total_first_year_extra: 7450,
     },
   },
 
-  // ─── MODERN ────────────────────────────────────────────
+  // MODERN
   {
     id:         'r35-gtr',
     symbol:     'R35GTR',
@@ -241,22 +196,22 @@ var WATCHLIST = [
     },
   },
 
-  // ─── EXOTIC ────────────────────────────────────────────
+  // EXOTIC
   {
     id:         'huracan-sto',
     symbol:     'HURASTO',
     make:       'Lamborghini',
-    model:      'Huracán STO (2022)',
+    model:      'Huracan STO (2022)',
     years:      '2022',
     category:   'Exotic',
-    engine:     'N/A V10',
+    engine:     'NA V10',
     power:      '631 hp',
     avg_price:  427632,
     low_price:  384995,
     high_price: 580000,
     prev_avg:   419500,
     color:      CHART_COLORS.purple,
-    note:       'Super Trofeo Omologata — road-legal race spec. 37 US listings.',
+    note:       'Super Trofeo Omologata. Road-legal race spec. 37 US listings.',
     bat_url:    'https://www.edmunds.com/used-lamborghini-huracan-sto/',
     market_url: 'https://www.classic.com/m/lamborghini/huracan/sto/',
     cost_to_own: {
@@ -266,78 +221,860 @@ var WATCHLIST = [
       import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     4500,
-      maintenance_note:       'CarBuzz: $850–1,500/yr basic + $3,500–6,000 major/5yr',
+      maintenance_note:       'CarBuzz: $850-1,500/yr basic + $3,500-6,000 major/5yr',
       total_first_year_extra: 13000,
     },
   },
 
-  // ─── ADD NEW CARS BELOW THIS LINE ──────────────────────
-  //
-  // Example — Honda NSX NA1:
-  //
-  // {
-  //   id:         'nsx-na1',
-  //   symbol:     'NSXNA1',
-  //   make:       'Honda',
-  //   model:      'NSX NA1',
-  //   years:      '1990–2005',
-  //   category:   'JDM',
-  //   engine:     'C32B VTEC V6',
-  //   power:      '270 hp',
-  //   avg_price:  95000,
-  //   low_price:  55000,
-  //   high_price: 185000,
-  //   prev_avg:   90000,
-  //   color:      CHART_COLORS.orange,
-  //   note:       'NSX-R variant (NA1) commands $150K+. US-spec vs JDM price gap narrowing.',
-  //   bat_url:    'https://bringatrailer.com/search/?s=honda+nsx',
-  //   market_url: 'https://www.classic.com/m/honda/nsx/',
-  // },
+  // ADD NEW WATCHLIST CARS BELOW THIS LINE
+  // (User-promoted cars from the ticker are stored in localStorage
+  //  and merged at runtime. To make permanent, paste the snippet
+  //  produced by the "Move to Watchlist" copy button here.)
 
 ];
 
 /**
  * ============================================================
- * TICKER UNIVERSE — Cars in the scrolling ticker tape
+ * TICKER UNIVERSE - Cars in the scrolling ticker
  * ============================================================
  *
- * These are NOT in the watchlist — they're background market
- * data for the ticker. Add any car symbol here.
- * Format: { symbol, name, price, change (%), direction }
+ * Every ticker entry uses the FULL watchlist schema. Click any
+ * ticker symbol on the dashboard to open its detail panel with
+ * a 90-day sparkline, listing links, and a "Move to Watchlist"
+ * button that promotes the car to the main chart.
  *
- * Tip: When you add a car to WATCHLIST, it auto-appears in the
- * ticker too (injected by the dashboard JS). You don't need to
- * add it here separately unless you want it ONLY in the ticker.
+ * Prices are estimates based on April 2026 market references
+ * (Classic.com averages, BaT auction medians, KBB/Edmunds where
+ * applicable). Update them when refreshing watchlist data.
+ *
+ * Maintenance/insurance estimates assume a clean, drivable
+ * example with specialty insurance for classics (Hagerty/Grundy)
+ * or full-coverage for moderns (TheZebra/CarEdge baseline).
  */
 var TICKER_UNIVERSE = [
-  { symbol: 'NSX-NA1',     name: 'Honda NSX NA1',              price: 95000,  change: 2.1  },
-  { symbol: 'FD-RX7',      name: 'Mazda RX-7 FD3S',            price: 42000,  change: -0.8 },
-  { symbol: 'EVO-VI',      name: 'Mitsubishi Evo VI TME',       price: 68000,  change: 3.4  },
-  { symbol: 'STI-RA',      name: 'Subaru STI RA',               price: 38000,  change: 1.2  },
-  { symbol: 'S15-SPEC',    name: 'Nissan Silvia S15',           price: 35000,  change: 4.7  },
-  { symbol: 'NSX-R',       name: 'Honda NSX-R',                 price: 185000, change: 5.2  },
-  { symbol: 'AE86',        name: 'Toyota AE86 Trueno',          price: 28000,  change: 6.1  },
-  { symbol: 'R34-GTR',     name: 'Nissan R34 GT-R',             price: 168000, change: 8.3  },
-  { symbol: 'GTO-3S',      name: 'Mitsubishi GTO 3S',           price: 22000,  change: -2.1 },
-  { symbol: '300ZX-Z32',   name: 'Nissan 300ZX Z32 TT',         price: 45000,  change: 3.9  },
-  { symbol: 'FC-RX7',      name: 'Mazda RX-7 FC3S',             price: 18000,  change: 2.8  },
-  { symbol: 'MR2-SW20',    name: 'Toyota MR2 SW20',             price: 24000,  change: -0.5 },
-  { symbol: 'S13-240SX',   name: 'Nissan 240SX S13',            price: 19000,  change: 1.6  },
-  { symbol: 'CELICA-GT4',  name: 'Toyota Celica GT-Four',       price: 31000,  change: 4.2  },
-  { symbol: 'LANCER-EVO4', name: 'Mitsubishi Evo IV',           price: 55000,  change: 2.9  },
-  { symbol: '458-SPEC',    name: 'Ferrari 458 Speciale',        price: 390000, change: 1.8  },
-  { symbol: 'GT3RS-991',   name: 'Porsche 991 GT3 RS',          price: 210000, change: -0.9 },
-  { symbol: 'AVENTADOR',   name: 'Lamborghini Aventador S',     price: 420000, change: 2.4  },
-  { symbol: '720S',        name: 'McLaren 720S',                price: 265000, change: -3.1 },
-  { symbol: 'CAYMAN-GT4',  name: 'Porsche Cayman GT4',          price: 118000, change: 1.4  },
-  { symbol: 'F8-TRIB',     name: 'Ferrari F8 Tributo',          price: 340000, change: 0.7  },
-  { symbol: 'VANTAGE-GT3', name: 'Aston Vantage GT3',           price: 195000, change: 3.8  },
-  { symbol: 'MCLAREN-600LT',name:'McLaren 600LT',               price: 225000, change: -1.2 },
-  { symbol: 'AMG-GTR',     name: 'Mercedes-AMG GT R',           price: 165000, change: 0.5  },
-  { symbol: 'M4-CSL',      name: 'BMW M4 CSL',                  price: 145000, change: 2.1  },
-  { symbol: 'GT500-21',    name: 'Shelby GT500 2021',           price: 92000,  change: 4.5  },
-  { symbol: 'ZL1-1LE',     name: 'Camaro ZL1 1LE',              price: 75000,  change: 1.9  },
-  { symbol: 'VIPER-ACR',   name: 'Dodge Viper ACR',             price: 188000, change: 6.2  },
-  { symbol: 'CORVETTE-Z06',name: 'Corvette Z06 C8',             price: 118000, change: -0.3 },
-  // Add more ticker-only symbols here ↓
+
+  // ==========================================================
+  // JDM ICONS
+  // ==========================================================
+  {
+    id:         'nsx-na1',
+    symbol:     'NSX-NA1',
+    make:       'Honda',
+    model:      'NSX NA1',
+    years:      '1990-2001',
+    category:   'JDM',
+    engine:     'C30A 3.0L NA V6 VTEC',
+    power:      '270 hp',
+    avg_price:  95000,
+    low_price:  55000,
+    high_price: 185000,
+    prev_avg:   93046,
+    color:      CHART_COLORS.orange,
+    note:       'Senna-developed chassis. NA2 (3.2L) and Type R command premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=honda+nsx+na1',
+    market_url: 'https://www.classic.com/m/honda/nsx/',
+    cost_to_own: {
+      insurance_annual:       800,
+      insurance_note:         'Hagerty agreed-value classic policy',
+      import_duty_pct:        0.025,
+      import_duty_est:        2375,
+      shipping_est:           4500,
+      maintenance_annual:     1500,
+      maintenance_note:       'Timing belt every 7 yrs/90K (~$3K). Mid-engine service involved.',
+      total_first_year_extra: 9175,
+    },
+  },
+  {
+    id:         'fd-rx7',
+    symbol:     'FD-RX7',
+    make:       'Mazda',
+    model:      'RX-7 FD3S',
+    years:      '1992-2002',
+    category:   'JDM',
+    engine:     '13B-REW Twin-Turbo Rotary',
+    power:      '252-276 hp',
+    avg_price:  42000,
+    low_price:  20000,
+    high_price: 95000,
+    prev_avg:   42339,
+    color:      CHART_COLORS.pink,
+    note:       'Spirit R Type-A is the holy grail. Apex seal rebuild every ~80K mi.',
+    bat_url:    'https://bringatrailer.com/search/?s=mazda+rx-7+fd',
+    market_url: 'https://www.classic.com/m/mazda/rx-7/fd/',
+    cost_to_own: {
+      insurance_annual:       700,
+      insurance_note:         'Hagerty classic; rotary platform raises rate slightly',
+      import_duty_pct:        0.025,
+      import_duty_est:        1050,
+      shipping_est:           4500,
+      maintenance_annual:     1500,
+      maintenance_note:       'Rotary: premix oil, apex seal monitoring, twin-turbo system',
+      total_first_year_extra: 7750,
+    },
+  },
+  {
+    id:         'evo-vi',
+    symbol:     'EVO-VI',
+    make:       'Mitsubishi',
+    model:      'Lancer Evolution VI TME',
+    years:      '1999-2001',
+    category:   'JDM',
+    engine:     '4G63T 2.0L Turbo I4',
+    power:      '276 hp',
+    avg_price:  68000,
+    low_price:  40000,
+    high_price: 120000,
+    prev_avg:   65764,
+    color:      CHART_COLORS.cyan,
+    note:       'Tommi Makinen Edition with red Recaros. CP9A chassis. Group A icon.',
+    bat_url:    'https://bringatrailer.com/search/?s=evo+vi+tme',
+    market_url: 'https://www.classic.com/m/mitsubishi/lancer-evolution/vi/',
+    cost_to_own: {
+      insurance_annual:       800,
+      insurance_note:         'Hagerty agreed-value; rally heritage qualifies',
+      import_duty_pct:        0.025,
+      import_duty_est:        1700,
+      shipping_est:           4500,
+      maintenance_annual:     1300,
+      maintenance_note:       '4G63T turbo service, AYC/ACD diff fluid, Recaro repairs',
+      total_first_year_extra: 8300,
+    },
+  },
+  {
+    id:         'sti-ra',
+    symbol:     'STI-RA',
+    make:       'Subaru',
+    model:      'Impreza WRX STI Type RA',
+    years:      '1994-2000',
+    category:   'JDM',
+    engine:     'EJ20 2.0L Turbo Flat-4',
+    power:      '280 hp',
+    avg_price:  38000,
+    low_price:  20000,
+    high_price: 70000,
+    prev_avg:   37549,
+    color:      CHART_COLORS.lime,
+    note:       'Type RA = stripped homologation special. 22B is the unicorn ($300K+).',
+    bat_url:    'https://bringatrailer.com/search/?s=sti+type+ra',
+    market_url: 'https://www.classic.com/m/subaru/impreza/sti/',
+    cost_to_own: {
+      insurance_annual:       700,
+      insurance_note:         'Hagerty specialty; 25-yr classic eligible',
+      import_duty_pct:        0.025,
+      import_duty_est:        950,
+      shipping_est:           4500,
+      maintenance_annual:     1200,
+      maintenance_note:       'EJ20 head gaskets, turbo, AWD service intervals',
+      total_first_year_extra: 7350,
+    },
+  },
+  {
+    id:         's15-spec',
+    symbol:     'S15-SPEC',
+    make:       'Nissan',
+    model:      'Silvia S15 Spec R',
+    years:      '1999-2002',
+    category:   'JDM',
+    engine:     'SR20DET 2.0L Turbo I4',
+    power:      '247 hp',
+    avg_price:  35000,
+    low_price:  22000,
+    high_price: 65000,
+    prev_avg:   33429,
+    color:      CHART_COLORS.rose,
+    note:       'Spec R = 6-spd + helical LSD. Aero kit and Autech variants premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=nissan+silvia+s15',
+    market_url: 'https://www.classic.com/m/nissan/silvia/s15/',
+    cost_to_own: {
+      insurance_annual:       700,
+      insurance_note:         'Hagerty classic; drift-modified examples may not qualify',
+      import_duty_pct:        0.025,
+      import_duty_est:        875,
+      shipping_est:           4500,
+      maintenance_annual:     1100,
+      maintenance_note:       'SR20DET turbo service, RHD-specific parts sourcing',
+      total_first_year_extra: 7175,
+    },
+  },
+  {
+    id:         'nsx-r',
+    symbol:     'NSX-R',
+    make:       'Honda',
+    model:      'NSX Type R (NA2)',
+    years:      '2002-2005',
+    category:   'JDM',
+    engine:     'C32B 3.2L NA V6 VTEC',
+    power:      '290 hp',
+    avg_price:  185000,
+    low_price:  130000,
+    high_price: 325000,
+    prev_avg:   175856,
+    color:      CHART_COLORS.sky,
+    note:       'Hand-blueprinted engine, carbon roof, no AC. Pinnacle of NA1/NA2.',
+    bat_url:    'https://bringatrailer.com/search/?s=nsx+type+r',
+    market_url: 'https://www.classic.com/m/honda/nsx/type-r/',
+    cost_to_own: {
+      insurance_annual:       1500,
+      insurance_note:         'Hagerty agreed-value; high stated value',
+      import_duty_pct:        0.025,
+      import_duty_est:        4625,
+      shipping_est:           4500,
+      maintenance_annual:     2200,
+      maintenance_note:       'Type R-specific service. Dry sump on later cars.',
+      total_first_year_extra: 12825,
+    },
+  },
+  {
+    id:         'ae86',
+    symbol:     'AE86',
+    make:       'Toyota',
+    model:      'Sprinter Trueno / Corolla Levin',
+    years:      '1983-1987',
+    category:   'JDM',
+    engine:     '4A-GE 1.6L NA I4',
+    power:      '128 hp',
+    avg_price:  28000,
+    low_price:  15000,
+    high_price: 60000,
+    prev_avg:   26390,
+    color:      CHART_COLORS.gold,
+    note:       'Initial D fame. GT-APEX trim with pop-up lights most sought.',
+    bat_url:    'https://bringatrailer.com/search/?s=ae86',
+    market_url: 'https://www.classic.com/m/toyota/corolla/ae86/',
+    cost_to_own: {
+      insurance_annual:       650,
+      insurance_note:         'Hagerty classic; clean originals only',
+      import_duty_pct:        0.025,
+      import_duty_est:        700,
+      shipping_est:           4500,
+      maintenance_annual:     900,
+      maintenance_note:       '4A-GE valve adjustments, age-related rust, original interior',
+      total_first_year_extra: 6750,
+    },
+  },
+  {
+    id:         'r34-gtr',
+    symbol:     'R34-GTR',
+    make:       'Nissan',
+    model:      'Skyline GT-R R34',
+    years:      '1999-2002',
+    category:   'JDM',
+    engine:     'RB26DETT Twin-Turbo I6',
+    power:      '276 hp (underrated)',
+    avg_price:  168000,
+    low_price:  100000,
+    high_price: 350000,
+    prev_avg:   155125,
+    color:      CHART_COLORS.indigo,
+    note:       '25-yr exempt 2024-2027 by trim. V-Spec II Nur tops $400K at auction.',
+    bat_url:    'https://bringatrailer.com/search/?s=r34+gt-r',
+    market_url: 'https://www.classic.com/m/nissan/skyline/r34/gt-r/',
+    cost_to_own: {
+      insurance_annual:       1500,
+      insurance_note:         'Hagerty agreed-value; high stated value for V-Specs',
+      import_duty_pct:        0.025,
+      import_duty_est:        4200,
+      shipping_est:           4500,
+      maintenance_annual:     1800,
+      maintenance_note:       'RB26 service, ATTESA/ETS hydraulic, Brembo refresh',
+      total_first_year_extra: 12000,
+    },
+  },
+  {
+    id:         'gto-3s',
+    symbol:     'GTO-3S',
+    make:       'Mitsubishi',
+    model:      'GTO Twin Turbo (JDM 3000GT VR-4)',
+    years:      '1990-1999',
+    category:   'JDM',
+    engine:     '6G72 3.0L Twin-Turbo V6',
+    power:      '320 hp',
+    avg_price:  22000,
+    low_price:  10000,
+    high_price: 50000,
+    prev_avg:   22473,
+    color:      CHART_COLORS.coral,
+    note:       'AWD with active aero. JDM Z16A chassis equivalent to US 3000GT VR-4.',
+    bat_url:    'https://bringatrailer.com/search/?s=mitsubishi+gto',
+    market_url: 'https://www.classic.com/m/mitsubishi/3000gt/',
+    cost_to_own: {
+      insurance_annual:       650,
+      insurance_note:         'Hagerty classic; clean low-mile examples preferred',
+      import_duty_pct:        0.025,
+      import_duty_est:        550,
+      shipping_est:           4500,
+      maintenance_annual:     1100,
+      maintenance_note:       '6G72 timing belt, twin-turbo plumbing, complex AWD',
+      total_first_year_extra: 6800,
+    },
+  },
+  {
+    id:         '300zx-z32',
+    symbol:     '300ZX-Z32',
+    make:       'Nissan',
+    model:      '300ZX Twin Turbo Z32',
+    years:      '1989-2000',
+    category:   'JDM',
+    engine:     'VG30DETT 3.0L Twin-Turbo V6',
+    power:      '300 hp',
+    avg_price:  45000,
+    low_price:  20000,
+    high_price: 90000,
+    prev_avg:   43311,
+    color:      CHART_COLORS.mint,
+    note:       'US-spec available; JDM TT also imported. Twin-turbo plumbing is dense.',
+    bat_url:    'https://bringatrailer.com/search/?s=300zx+twin+turbo',
+    market_url: 'https://www.classic.com/m/nissan/300zx/z32/',
+    cost_to_own: {
+      insurance_annual:       1200,
+      insurance_note:         'Hagerty classic for clean US-spec; collector tier',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1500,
+      maintenance_note:       'VG30DETT timing belt, twin-turbo refresh, intercooler hoses',
+      total_first_year_extra: 2700,
+    },
+  },
+  {
+    id:         'fc-rx7',
+    symbol:     'FC-RX7',
+    make:       'Mazda',
+    model:      'RX-7 FC3S Turbo II',
+    years:      '1985-1991',
+    category:   'JDM',
+    engine:     '13B Turbo Rotary',
+    power:      '200 hp',
+    avg_price:  18000,
+    low_price:  9000,
+    high_price: 45000,
+    prev_avg:   17510,
+    color:      CHART_COLORS.orange,
+    note:       'US-spec available. Turbo II is the enthusiast pick. Rust-prone.',
+    bat_url:    'https://bringatrailer.com/search/?s=mazda+rx-7+fc',
+    market_url: 'https://www.classic.com/m/mazda/rx-7/fc/',
+    cost_to_own: {
+      insurance_annual:       600,
+      insurance_note:         'Hagerty classic; rotary surcharge on some carriers',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1500,
+      maintenance_note:       'Rotary: apex seals, premix oil, vacuum hose hell',
+      total_first_year_extra: 2100,
+    },
+  },
+  {
+    id:         'mr2-sw20',
+    symbol:     'MR2-SW20',
+    make:       'Toyota',
+    model:      'MR2 SW20 Turbo',
+    years:      '1991-1995',
+    category:   'JDM',
+    engine:     '3S-GTE 2.0L Turbo I4',
+    power:      '200-245 hp',
+    avg_price:  24000,
+    low_price:  12000,
+    high_price: 50000,
+    prev_avg:   24121,
+    color:      CHART_COLORS.pink,
+    note:       'US-spec turbo from 91-95. Rev3+ chassis fixed snap-oversteer issue.',
+    bat_url:    'https://bringatrailer.com/search/?s=mr2+sw20+turbo',
+    market_url: 'https://www.classic.com/m/toyota/mr2/sw20/',
+    cost_to_own: {
+      insurance_annual:       650,
+      insurance_note:         'Hagerty classic agreed-value',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1100,
+      maintenance_note:       '3S-GTE service, mid-engine access, T-top seal refresh',
+      total_first_year_extra: 1750,
+    },
+  },
+  {
+    id:         's13-240sx',
+    symbol:     'S13-240SX',
+    make:       'Nissan',
+    model:      '240SX S13 (Silvia/180SX)',
+    years:      '1989-1994',
+    category:   'JDM',
+    engine:     'KA24DE / SR20DET (swap)',
+    power:      '155-205 hp',
+    avg_price:  19000,
+    low_price:  8000,
+    high_price: 45000,
+    prev_avg:   18701,
+    color:      CHART_COLORS.cyan,
+    note:       'US-spec KA24 base. Clean unmodified examples appreciating fast.',
+    bat_url:    'https://bringatrailer.com/search/?s=240sx+s13',
+    market_url: 'https://www.classic.com/m/nissan/240sx/s13/',
+    cost_to_own: {
+      insurance_annual:       600,
+      insurance_note:         'Hagerty classic for unmodified; modified usually denied',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1000,
+      maintenance_note:       'KA24DE timing chain, age rubber, hatch body rust',
+      total_first_year_extra: 1600,
+    },
+  },
+  {
+    id:         'celica-gt4',
+    symbol:     'CELICA-GT4',
+    make:       'Toyota',
+    model:      'Celica GT-Four ST205',
+    years:      '1994-1999',
+    category:   'JDM',
+    engine:     '3S-GTE 2.0L Turbo I4',
+    power:      '252 hp',
+    avg_price:  31000,
+    low_price:  15000,
+    high_price: 70000,
+    prev_avg:   29751,
+    color:      CHART_COLORS.lime,
+    note:       'WRC homologation. ST205 is rarest; ST185/ST165 also collected.',
+    bat_url:    'https://bringatrailer.com/search/?s=celica+gt-four',
+    market_url: 'https://www.classic.com/m/toyota/celica/gt-four/',
+    cost_to_own: {
+      insurance_annual:       700,
+      insurance_note:         'Hagerty agreed-value rally heritage classic',
+      import_duty_pct:        0.025,
+      import_duty_est:        775,
+      shipping_est:           4500,
+      maintenance_annual:     1100,
+      maintenance_note:       '3S-GTE turbo, AWD service, water-to-air intercooler',
+      total_first_year_extra: 7075,
+    },
+  },
+  {
+    id:         'lancer-evo4',
+    symbol:     'LANCER-EVO4',
+    make:       'Mitsubishi',
+    model:      'Lancer Evolution IV',
+    years:      '1996-1998',
+    category:   'JDM',
+    engine:     '4G63T 2.0L Turbo I4',
+    power:      '276 hp',
+    avg_price:  55000,
+    low_price:  30000,
+    high_price: 95000,
+    prev_avg:   53450,
+    color:      CHART_COLORS.rose,
+    note:       'CN9A chassis. First Evo with AYC active diff. Gateway to Evo collecting.',
+    bat_url:    'https://bringatrailer.com/search/?s=evo+iv',
+    market_url: 'https://www.classic.com/m/mitsubishi/lancer-evolution/iv/',
+    cost_to_own: {
+      insurance_annual:       750,
+      insurance_note:         'Hagerty agreed-value classic',
+      import_duty_pct:        0.025,
+      import_duty_est:        1375,
+      shipping_est:           4500,
+      maintenance_annual:     1300,
+      maintenance_note:       '4G63T turbo, AYC fluid intervals, age-related parts hunt',
+      total_first_year_extra: 7925,
+    },
+  },
+
+  // ==========================================================
+  // EUROPEAN / EXOTIC
+  // ==========================================================
+  {
+    id:         '458-spec',
+    symbol:     '458-SPEC',
+    make:       'Ferrari',
+    model:      '458 Speciale',
+    years:      '2013-2015',
+    category:   'Exotic',
+    engine:     '4.5L NA V8',
+    power:      '597 hp',
+    avg_price:  390000,
+    low_price:  320000,
+    high_price: 550000,
+    prev_avg:   383104,
+    color:      CHART_COLORS.sky,
+    note:       'Last NA V8 mid-engine Ferrari. Aperta convertibles command premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=458+speciale',
+    market_url: 'https://www.classic.com/m/ferrari/458/speciale/',
+    cost_to_own: {
+      insurance_annual:       8000,
+      insurance_note:         'Putnam Leasing/Chubb high-value; agreed-value collector',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     5000,
+      maintenance_note:       'Ferrari Power7 covers most; major service ~$4-6K every 7 yrs',
+      total_first_year_extra: 13000,
+    },
+  },
+  {
+    id:         'gt3rs-991',
+    symbol:     'GT3RS-991',
+    make:       'Porsche',
+    model:      '911 GT3 RS (991.2)',
+    years:      '2018-2019',
+    category:   'Exotic',
+    engine:     '4.0L NA Flat-6',
+    power:      '520 hp',
+    avg_price:  210000,
+    low_price:  165000,
+    high_price: 300000,
+    prev_avg:   211907,
+    color:      CHART_COLORS.gold,
+    note:       'Last NA RS before turbo era 992. Weissach pkg + magnesium wheels rare.',
+    bat_url:    'https://bringatrailer.com/search/?s=gt3+rs+991',
+    market_url: 'https://www.classic.com/m/porsche/911/991/gt3-rs/',
+    cost_to_own: {
+      insurance_annual:       5500,
+      insurance_note:         'Chubb/Hagerty Drivers Club; track-day endorsement available',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     3500,
+      maintenance_note:       'Porsche service every 10K mi. Track use raises consumables.',
+      total_first_year_extra: 9000,
+    },
+  },
+  {
+    id:         'aventador',
+    symbol:     'AVENTADOR',
+    make:       'Lamborghini',
+    model:      'Aventador S',
+    years:      '2017-2021',
+    category:   'Exotic',
+    engine:     '6.5L NA V12',
+    power:      '730 hp',
+    avg_price:  420000,
+    low_price:  340000,
+    high_price: 600000,
+    prev_avg:   410156,
+    color:      CHART_COLORS.indigo,
+    note:       'Last NA Lambo V12 platform. SVJ tops the range at $700K+.',
+    bat_url:    'https://bringatrailer.com/search/?s=aventador+s',
+    market_url: 'https://www.classic.com/m/lamborghini/aventador/',
+    cost_to_own: {
+      insurance_annual:       9000,
+      insurance_note:         'Chubb high-value; agreed-value, garage required',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     6000,
+      maintenance_note:       'V12 service is engine-out at major intervals (~$15K every 5 yrs)',
+      total_first_year_extra: 15000,
+    },
+  },
+  {
+    id:         '720s',
+    symbol:     '720S',
+    make:       'McLaren',
+    model:      '720S',
+    years:      '2017-2023',
+    category:   'Exotic',
+    engine:     '4.0L Twin-Turbo V8',
+    power:      '710 hp',
+    avg_price:  265000,
+    low_price:  200000,
+    high_price: 380000,
+    prev_avg:   273478,
+    color:      CHART_COLORS.coral,
+    note:       'Spider variants $20K premium. Track Pack and MSO commissions appreciate.',
+    bat_url:    'https://bringatrailer.com/search/?s=mclaren+720s',
+    market_url: 'https://www.classic.com/m/mclaren/720s/',
+    cost_to_own: {
+      insurance_annual:       6500,
+      insurance_note:         'Chubb/PURE high-value; carbon tub raises stated value',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     4500,
+      maintenance_note:       'McLaren dealer service. Hydraulic suspension components costly.',
+      total_first_year_extra: 11000,
+    },
+  },
+  {
+    id:         'cayman-gt4',
+    symbol:     'CAYMAN-GT4',
+    make:       'Porsche',
+    model:      '718 Cayman GT4',
+    years:      '2020-2024',
+    category:   'European',
+    engine:     '4.0L NA Flat-6',
+    power:      '414 hp',
+    avg_price:  118000,
+    low_price:  92000,
+    high_price: 165000,
+    prev_avg:   116371,
+    color:      CHART_COLORS.mint,
+    note:       'Manual-only NA flat-6. RS variant added 2022 with $30K premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=cayman+gt4',
+    market_url: 'https://www.classic.com/m/porsche/718-cayman/gt4/',
+    cost_to_own: {
+      insurance_annual:       3500,
+      insurance_note:         'Hagerty Drivers Club / standard performance carrier',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     2200,
+      maintenance_note:       'Porsche minor every 10K, brakes wear faster on track use',
+      total_first_year_extra: 5700,
+    },
+  },
+  {
+    id:         'f8-trib',
+    symbol:     'F8-TRIB',
+    make:       'Ferrari',
+    model:      'F8 Tributo',
+    years:      '2019-2022',
+    category:   'Exotic',
+    engine:     '3.9L Twin-Turbo V8',
+    power:      '710 hp',
+    avg_price:  340000,
+    low_price:  275000,
+    high_price: 480000,
+    prev_avg:   337636,
+    color:      CHART_COLORS.orange,
+    note:       'Last 488-platform mid-engine V8. Spider adds ~$30K. 296 GTB successor.',
+    bat_url:    'https://bringatrailer.com/search/?s=f8+tributo',
+    market_url: 'https://www.classic.com/m/ferrari/f8-tributo/',
+    cost_to_own: {
+      insurance_annual:       8000,
+      insurance_note:         'Chubb/PURE high-value; agreed-value collector policy',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     5000,
+      maintenance_note:       'Ferrari Power7 covers years 1-7. Major service ~$5K post-warranty.',
+      total_first_year_extra: 13000,
+    },
+  },
+  {
+    id:         'vantage-gt3',
+    symbol:     'VANTAGE-GT3',
+    make:       'Aston Martin',
+    model:      'Vantage (V12 / GT3 spec)',
+    years:      '2023-Present',
+    category:   'European',
+    engine:     '4.0L Twin-Turbo V8 (or 5.2L V12)',
+    power:      '656 hp',
+    avg_price:  195000,
+    low_price:  150000,
+    high_price: 280000,
+    prev_avg:   187861,
+    color:      CHART_COLORS.pink,
+    note:       'Refreshed Vantage with significant power bump. V12 limited build slots.',
+    bat_url:    'https://bringatrailer.com/search/?s=aston+vantage+v12',
+    market_url: 'https://www.classic.com/m/aston-martin/vantage/',
+    cost_to_own: {
+      insurance_annual:       5000,
+      insurance_note:         'Chubb high-value; specialty Aston coverage',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     3500,
+      maintenance_note:       'Aston dealer service. Mercedes-AMG sourced V8 aids parts supply.',
+      total_first_year_extra: 8500,
+    },
+  },
+  {
+    id:         'mclaren-600lt',
+    symbol:     'MCLAREN-600LT',
+    make:       'McLaren',
+    model:      '600LT',
+    years:      '2018-2020',
+    category:   'Exotic',
+    engine:     '3.8L Twin-Turbo V8',
+    power:      '592 hp',
+    avg_price:  225000,
+    low_price:  175000,
+    high_price: 320000,
+    prev_avg:   227733,
+    color:      CHART_COLORS.cyan,
+    note:       'Spider adds ~$25K. MSO Club Sport pkg with carbon racing seats premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=mclaren+600lt',
+    market_url: 'https://www.classic.com/m/mclaren/600lt/',
+    cost_to_own: {
+      insurance_annual:       6000,
+      insurance_note:         'Chubb/PURE high-value; carbon body raises stated value',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     4000,
+      maintenance_note:       'McLaren dealer service; specialty fluids and brake refresh',
+      total_first_year_extra: 10000,
+    },
+  },
+  {
+    id:         'amg-gtr',
+    symbol:     'AMG-GTR',
+    make:       'Mercedes-AMG',
+    model:      'GT R',
+    years:      '2017-2021',
+    category:   'European',
+    engine:     '4.0L Twin-Turbo V8',
+    power:      '577 hp',
+    avg_price:  165000,
+    low_price:  120000,
+    high_price: 240000,
+    prev_avg:   164179,
+    color:      CHART_COLORS.lime,
+    note:       'Green Hell. Pro variants and Black Series command significant premium.',
+    bat_url:    'https://bringatrailer.com/search/?s=amg+gt+r',
+    market_url: 'https://www.classic.com/m/mercedes-benz/amg-gt/gt-r/',
+    cost_to_own: {
+      insurance_annual:       4500,
+      insurance_note:         'Hagerty/Chubb high-performance; standard exotic tier',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     3000,
+      maintenance_note:       'AMG service every 10K. Track use raises tire/brake spend.',
+      total_first_year_extra: 7500,
+    },
+  },
+  {
+    id:         'm4-csl',
+    symbol:     'M4-CSL',
+    make:       'BMW',
+    model:      'M4 CSL',
+    years:      '2022-2023',
+    category:   'European',
+    engine:     '3.0L Twin-Turbo I6',
+    power:      '543 hp',
+    avg_price:  145000,
+    low_price:  115000,
+    high_price: 200000,
+    prev_avg:   142018,
+    color:      CHART_COLORS.rose,
+    note:       'Limited 1,000 US units. RWD-only, weight-stripped. CS variant cheaper alt.',
+    bat_url:    'https://bringatrailer.com/search/?s=m4+csl',
+    market_url: 'https://www.classic.com/m/bmw/m4/csl/',
+    cost_to_own: {
+      insurance_annual:       4000,
+      insurance_note:         'Hagerty Drivers Club / specialty M coverage',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     2500,
+      maintenance_note:       'BMW M service. Carbon roof and seats add detail cost.',
+      total_first_year_extra: 6500,
+    },
+  },
+
+  // ==========================================================
+  // AMERICAN MUSCLE
+  // ==========================================================
+  {
+    id:         'gt500-21',
+    symbol:     'GT500-21',
+    make:       'Ford',
+    model:      'Mustang Shelby GT500',
+    years:      '2020-2022',
+    category:   'Muscle',
+    engine:     '5.2L Supercharged V8',
+    power:      '760 hp',
+    avg_price:  92000,
+    low_price:  72000,
+    high_price: 145000,
+    prev_avg:   88038,
+    color:      CHART_COLORS.sky,
+    note:       'Carbon Fiber Track Pack adds ~$15K. Heritage Edition rare.',
+    bat_url:    'https://bringatrailer.com/search/?s=gt500+2021',
+    market_url: 'https://www.classic.com/m/ford/mustang/shelby-gt500/',
+    cost_to_own: {
+      insurance_annual:       3000,
+      insurance_note:         'Standard performance carrier; low rate vs European exotics',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1500,
+      maintenance_note:       'Ford dealer service. Predator engine reliability is strong.',
+      total_first_year_extra: 4500,
+    },
+  },
+  {
+    id:         'zl1-1le',
+    symbol:     'ZL1-1LE',
+    make:       'Chevrolet',
+    model:      'Camaro ZL1 1LE',
+    years:      '2018-2024',
+    category:   'Muscle',
+    engine:     '6.2L Supercharged V8',
+    power:      '650 hp',
+    avg_price:  75000,
+    low_price:  55000,
+    high_price: 110000,
+    prev_avg:   73602,
+    color:      CHART_COLORS.gold,
+    note:       'Track-pack with carbon wing. Manuals premium over auto-equipped cars.',
+    bat_url:    'https://bringatrailer.com/search/?s=zl1+1le',
+    market_url: 'https://www.classic.com/m/chevrolet/camaro/zl1-1le/',
+    cost_to_own: {
+      insurance_annual:       2800,
+      insurance_note:         'Standard performance; track endorsement raises rate',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     1500,
+      maintenance_note:       'GM dealer; LT4 supercharged engine reliability strong',
+      total_first_year_extra: 4300,
+    },
+  },
+  {
+    id:         'viper-acr',
+    symbol:     'VIPER-ACR',
+    make:       'Dodge',
+    model:      'Viper ACR (5th Gen)',
+    years:      '2016-2017',
+    category:   'Muscle',
+    engine:     '8.4L NA V10',
+    power:      '645 hp',
+    avg_price:  188000,
+    low_price:  140000,
+    high_price: 280000,
+    prev_avg:   177024,
+    color:      CHART_COLORS.indigo,
+    note:       'Final-year ACR Extreme holds Nurburgring lap record for prod tires.',
+    bat_url:    'https://bringatrailer.com/search/?s=viper+acr',
+    market_url: 'https://www.classic.com/m/dodge/viper/acr/',
+    cost_to_own: {
+      insurance_annual:       5000,
+      insurance_note:         'Hagerty agreed-value; collector tier despite recency',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     2500,
+      maintenance_note:       'OEM parts hard to source post-Conner Avenue. ACR aero parts pricey.',
+      total_first_year_extra: 7500,
+    },
+  },
+  {
+    id:         'corvette-z06',
+    symbol:     'CORVETTE-Z06',
+    make:       'Chevrolet',
+    model:      'Corvette Z06 (C8)',
+    years:      '2023-Present',
+    category:   'Muscle',
+    engine:     '5.5L NA Flat-Plane V8 (LT6)',
+    power:      '670 hp',
+    avg_price:  118000,
+    low_price:  95000,
+    high_price: 180000,
+    prev_avg:   118355,
+    color:      CHART_COLORS.coral,
+    note:       'Z07 pkg adds carbon wheels and aero. Dealer markups have cooled in 2026.',
+    bat_url:    'https://bringatrailer.com/search/?s=c8+z06',
+    market_url: 'https://www.classic.com/m/chevrolet/corvette/c8-z06/',
+    cost_to_own: {
+      insurance_annual:       3500,
+      insurance_note:         'Standard performance carrier; agreed-value optional',
+      import_duty_pct:        0,
+      import_duty_est:        0,
+      shipping_est:           0,
+      maintenance_annual:     2000,
+      maintenance_note:       'Chevy dealer service. Flat-plane V8 oil and intake intervals.',
+      total_first_year_extra: 5500,
+    },
+  },
+
 ];

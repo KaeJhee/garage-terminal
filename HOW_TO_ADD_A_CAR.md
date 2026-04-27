@@ -1,216 +1,284 @@
-# How to Add a Car to Garage Terminal
+# How to Add a Car
 
-Adding a new car to the watchlist takes about 5 minutes.
-You only ever touch **one file**: `frontend/cars.config.js`.
+`cars.config.js` is the single source of truth for the entire dashboard. Add a car there and **everything else updates automatically** — the chart, the ticker, the watchlist, the scraper, the price history. You never edit Python files, the HTML, or the workflow.
 
----
-
-## Step 1 — Open `cars.config.js`
-
-```
-garage-terminal/
-└── frontend/
-    └── cars.config.js   ← edit this file only
-```
+This is by design.
 
 ---
 
-## Step 2 — Copy a car block
+## The 60-second version
 
-Find the section at the bottom of the `WATCHLIST` array:
+1. Open `frontend/cars.config.js`
+2. Decide: should this car go in the **watchlist sidebar** or just on the **scrolling ticker**?
+   - **Watchlist** = always visible in the left sidebar, gets a colored line on the main chart. Pick this for cars you actively track.
+   - **Ticker** = scrolls across the top tape. Click to open the detail modal. Pick this for cars you're casually watching but don't need on the main chart.
+3. Copy an existing car's block from the matching array (`WATCHLIST` or `TICKER_UNIVERSE`)
+4. Paste it at the end of the array, change the fields
+5. Save, commit, push
 
-```js
-// ─── ADD NEW CARS BELOW THIS LINE ──────────────────────
-```
-
-Copy any existing car object (e.g., the NSX example that's commented out)
-and paste it right before the closing `];`.
+That's the whole workflow. The scraper picks it up next Sunday, generates 365 days of history, and updates the dashboard.
 
 ---
 
-## Step 3 — Fill in the fields
-
-Here's a complete example — a Mitsubishi Evo IX:
+## The fields
 
 ```js
 {
-  id:         'evo-ix',          // unique slug, lowercase, hyphens only
-  symbol:     'EVOIX',           // 6-8 chars, uppercase, shown in sidebar/ticker
-  make:       'Mitsubishi',      // manufacturer
-  model:      'Lancer Evo IX',   // full display name on the chart
-  years:      '2005–2007',       // production years
-  category:   'JDM',             // JDM | Modern | Exotic | Muscle | European
-  engine:     '4G63T Turbo I4',  // engine description
-  power:      '286 hp (factory)',
-  avg_price:  42000,             // current average market price (USD)
-  low_price:  22000,             // realistic entry-level price
-  high_price: 75000,             // top of the typical range
-  prev_avg:   39500,             // previous period avg (used for ▲/▼ delta)
-                                 // tip: set ~3-8% below avg_price for upward trend
-  color:      CHART_COLORS.orange,  // pick any unused color from the palette below
-  note:       'MR edition commands $15K+ premium. CT9A chassis.',
-  bat_url:    'https://bringatrailer.com/search/?s=evo+ix',
-  market_url: 'https://www.classic.com/m/mitsubishi/lancer-evolution/',
+  id:         'mclaren-p1',                   // unique slug, lowercase, hyphens
+  symbol:     'P1',                            // ticker label, 6-8 chars uppercase
+  make:       'McLaren',
+  model:      'P1',
+  years:      '2013-2015',
+  category:   'Exotic',                        // JDM | Modern | Exotic | Muscle | European
+  engine:     '3.8L Twin-Turbo V8 Hybrid',
+  power:      '903 hp',
+  avg_price:  1900000,                         // current market avg (USD, integer)
+  low_price:  1500000,                         // typical low end of the range
+  high_price: 2400000,                         // typical high end
+  prev_avg:   1850000,                         // previous period - used for delta arrow
+  color:      CHART_COLORS.purple,             // pick from the CHART_COLORS palette
+  note:       'Limited to 375 units. Prices climbing on hybrid hypercar revival.',
+  bat_url:    'https://bringatrailer.com/search/?s=mclaren+p1',
+  market_url: 'https://www.classic.com/m/mclaren/p1/',
 
-  // ─── COST-TO-OWN — First-year ownership cost estimates ────────────────
-  // JDM import example (25-yr US exemption qualifies for 2.5% duty)
   cost_to_own: {
-    insurance_annual:       700,          // Annual specialty insurance estimate
-    insurance_note:         'Hagerty/Grundy specialty classic car policy',
-    import_duty_pct:        0.025,        // 2.5% US import duty (25-yr exemption)
-    import_duty_est:        1050,         // avg_price x import_duty_pct
-    shipping_est:           4500,         // Japan → US West Coast
-    maintenance_annual:     1200,         // Annual maintenance estimate
-    maintenance_note:       '4G63T service, intercooler, clutch wear items',
-    total_first_year_extra: 7450,         // duty + shipping + insurance + maintenance
+    insurance_annual:       8000,
+    insurance_note:         'Hagerty agreed-value or Chubb collector policy',
+    import_duty_pct:        0,                 // 0 for US-spec cars
+    import_duty_est:        0,                 // 0 for US-spec cars
+    shipping_est:           0,                 // 0 for US-spec / domestic cars
+    maintenance_annual:     12000,
+    maintenance_note:       'Carbon tub inspection, hybrid battery service, McLaren-only',
+    total_first_year_extra: 20000,             // sum of insurance + maintenance + duty + shipping
   },
 },
 ```
 
-> **For US-spec cars** (R35 GT-R, Huracan STO, etc.), set `import_duty_pct`,
-> `import_duty_est`, and `shipping_est` all to `0`. The panel will display
-> "N/A — US Spec" automatically for those rows.
+### Field reference
 
----
+| Field | What it does |
+|-------|--------------|
+| `id` | Unique slug. Used internally and for localStorage. Must match nothing else in the file. |
+| `symbol` | Short ticker label shown on the scrolling tape and watchlist. 6-8 chars, uppercase, no spaces. |
+| `make` / `model` / `years` | Display info. `model` shows on the chart header, `years` shows in the specs strip. |
+| `category` | Drives the JDM Avg / Exotic Avg KPI tiles. Stick to: `JDM`, `Modern`, `Exotic`, `Muscle`, `European`. |
+| `engine` / `power` / `note` | Specs strip + market note. Free-form text. |
+| `avg_price` / `low_price` / `high_price` | Drive the price gauge and chart. The scraper will overwrite `avg_price` weekly with real market data. |
+| `prev_avg` | Used to calculate the up/down arrow and percentage. The scraper overwrites this on each run with the prior week's `avg_price`. |
+| `color` | Line color on the main chart. Pick from `CHART_COLORS` (defined at the top of the file). |
+| `bat_url` | **Important.** This is what the scraper hits on Bring a Trailer. Use a search URL like `bringatrailer.com/search/?s=mclaren+p1`. |
+| `market_url` | **Important.** This is what the scraper hits on classic.com. Use the model market page like `classic.com/m/mclaren/p1/`. |
+| `cost_to_own` | All fields are required. For US-spec cars, set `import_duty_pct`, `import_duty_est`, and `shipping_est` to 0 — the dashboard will show "N/A · US Spec". |
 
-## Step 4 — Pick a color
+### Computing `total_first_year_extra`
 
-Open `CHART_COLORS` at the top of the file and pick any color marked `// --- Available ---`:
+Add up the four cost components:
 
-| Name     | Hex       | Preview |
-|----------|-----------|---------|
-| orange   | `#f5804b` | warm orange |
-| pink     | `#f06ea0` | hot pink |
-| cyan     | `#22d3ee` | bright cyan |
-| lime     | `#84cc16` | electric lime |
-| rose     | `#fb7185` | rose red |
-| sky      | `#38bdf8` | sky blue |
-| gold     | `#fbbf24` | gold yellow |
-| indigo   | `#818cf8` | soft indigo |
-| coral    | `#ff6b6b` | coral red |
-| mint     | `#6ee7b7` | mint green |
-
-Mark the color as `(in use)` in the comment after you pick it, so you don't accidentally reuse it.
-
----
-
-## Step 5 — Find the right prices
-
-**avg_price** — the most important field. Sources (in order of preference):
-
-| Car type | Best source |
-|----------|-------------|
-| JDM classics | [classic.com](https://classic.com) — search the make/model |
-| JDM classics | [Bring a Trailer](https://bringatrailer.com) — sort completed auctions |
-| Modern performance | [KBB Used](https://kbb.com) — select "Fair Market Range" |
-| Modern performance | [Cars.com](https://cars.com) — check "Avg. Listed Price" |
-| Exotic / European | [Edmunds Used](https://edmunds.com) |
-| Any car | [CarGurus Price Trends](https://cargurus.com) |
-
-**prev_avg** — if you don't have a previous data point, estimate it:
-- Appreciating market: set 3–8% below `avg_price`
-- Depreciating market: set 1–3% above `avg_price`
-
----
-
-## Step 6 — Also add to the scraper (for auto-updates)
-
-If you want the weekly GitHub Actions job to keep prices fresh for your
-new car, add an entry to `scraper/scrape_prices.py` in the `CARS` list:
-
-```python
-{
-    "id": "evo-ix",
-    "label": "Mitsubishi Lancer Evo IX",
-    "sources": [
-        {
-            "type": "classic_com",
-            "url": "https://www.classic.com/m/mitsubishi/lancer-evolution/",
-        },
-        {
-            "type": "bat_search",
-            "url": "https://bringatrailer.com/search/?s=evo+ix",
-            "search_term": "evo ix",
-        },
-    ],
-    "fallback_avg": 42000,   # used if scraping fails
-},
+```
+total_first_year_extra = insurance_annual + maintenance_annual + import_duty_est + shipping_est
 ```
 
+For a US-spec car: only insurance + maintenance.
+For a JDM import: all four.
+
+The dashboard does not validate this — it just displays whatever you put. If the math is off, the "Year 1 Extra" total in the Cost-to-Own panel will be wrong. Easy to spot, easy to fix.
+
+### Picking the right `bat_url` and `market_url`
+
+The scraper uses these URLs. If they're broken or ambiguous, the scraper falls back to the `avg_price` you set. So while the dashboard works either way, real scraped pricing only happens when the URLs resolve.
+
+**Bring a Trailer** — go to bringatrailer.com, search for the car, copy the URL of the search results page:
+```
+https://bringatrailer.com/search/?s=mclaren+p1
+```
+
+**classic.com** — go to classic.com, navigate to the make/model market page (not a specific listing). The URL pattern is:
+```
+https://www.classic.com/m/<make>/<model>/
+https://www.classic.com/m/mclaren/p1/
+https://www.classic.com/m/nissan/skyline/r34/gt-r/
+```
+
+If classic.com doesn't have a page for the car (rare), point `market_url` at the closest related page or just the make page. The scraper will gracefully fall back.
+
 ---
 
-## Step 7 — Save, refresh, push
+## Watchlist vs Ticker — picking the right array
 
-1. Save `cars.config.js`
-2. Open the dashboard in your browser → hard-refresh (`Cmd+Shift+R` on Mac)
-3. The new car automatically appears in the sidebar and ticker
-4. Push to GitHub:
+The two arrays in `cars.config.js`:
+
+```js
+var WATCHLIST       = [ ... 5 cars ... ]      // Sidebar + main chart
+var TICKER_UNIVERSE = [ ... 29 cars ... ]     // Scrolling tape only
+```
+
+Both arrays use the **same exact schema**. The only difference is where the car appears on the dashboard.
+
+**Put a car in `WATCHLIST` when:**
+- You want it visible without clicking
+- You want a colored line on the main chart you can compare against
+- It's a primary tracking target
+
+**Put a car in `TICKER_UNIVERSE` when:**
+- You want it on the scrolling tape with all the others
+- You want to see its price casually but don't need it always on screen
+- You're keeping the watchlist focused on a small number of cars
+
+You can always promote a ticker car later via the dashboard's "Move to Watchlist" button (which works in-browser via localStorage). To make it permanent across all browsers and the deployed site, you click "Copy config snippet" in the modal — it puts a paste-ready block on your clipboard. Paste that into the `WATCHLIST` array, push, done.
+
+---
+
+## What happens after you push
+
+```
+1. You push to GitHub
+   |
+   v
+2. Vercel + Netlify see the push, redeploy in ~30s
+   |
+   v
+3. Your new car appears on the dashboard
+   - Watchlist sidebar (if added to WATCHLIST)
+   - Scrolling ticker (always)
+   - Detail modal works (click the ticker)
+   - Sparkline shows a JS-generated walk based on avg_price
+   |
+   v
+4. Sunday at midnight UTC, GitHub Actions runs:
+   - scrape_prices.py reads cars.config.js, scrapes BaT + classic.com for every car
+   - Writes scraper/scraped_prices.json
+   - generate_history.py reads that JSON, regenerates frontend/data.js
+     with real 365-day histories for every car
+   - Patches avg_price + prev_avg in cars.config.js with the latest scraped prices
+   - Commits + pushes
+   - Triggers Netlify and/or Vercel redeploy
+   |
+   v
+5. Dashboard now shows real market data for your new car
+```
+
+You don't touch `scrape_prices.py`, `generate_history.py`, the workflow, or `data.js`. They all read from `cars.config.js`.
+
+---
+
+## Quick sanity checks before pushing
+
+A few things that have bitten in the past:
+
+1. **`id` must be unique.** If two cars have the same `id`, the scraper patcher will get confused and silently corrupt the file.
+
+2. **`color: CHART_COLORS.<name>` must reference a real palette entry.** Check the top of `cars.config.js` for the available names. If you write `CHART_COLORS.fuchsia` and that doesn't exist, the chart line will be undefined.
+
+3. **Trailing comma after the closing brace.** The arrays use trailing commas:
+   ```js
+   {
+     id: 'foo',
+     ...
+   },   // <-- this comma matters
+   ```
+   Missing it on a non-final entry causes a JavaScript syntax error and the whole dashboard goes blank. Easy to test locally before pushing — open `frontend/index.html` in your browser. If the page is blank, hit F12 and look at the console for the syntax error.
+
+4. **`total_first_year_extra` math.** Add the four components yourself. The dashboard doesn't recalculate it.
+
+5. **The `avg_price` is your initial value.** The scraper will replace it Sunday with whatever it finds. If the URLs are broken, your initial value sticks. So put in a realistic number — don't use 0 or a placeholder.
+
+---
+
+## Testing locally before pushing (optional but smart)
+
+Quick way to verify nothing is broken:
 
 ```bash
-cd garage-terminal
-git add frontend/cars.config.js scraper/scrape_prices.py
-git commit -m "feat: add Evo IX to watchlist"
-git push
+cd ~/Desktop/garage-terminal/frontend
+open index.html
 ```
 
-Netlify/Vercel will automatically redeploy within ~30 seconds.
+Or use a tiny static server (avoids `file://` quirks):
 
----
+```bash
+cd ~/Desktop/garage-terminal/frontend
+python3 -m http.server 8000
+# then open http://localhost:8000 in your browser
+```
 
-## Field Reference (quick cheat sheet)
+If the new car shows up on the ticker and clicking it opens a detail modal with the right data, you're good to push.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | string | Lowercase slug, hyphens. Must be **unique**. Used as dictionary key everywhere. |
-| `symbol` | string | 6–8 chars, uppercase. Shown in sidebar + ticker. Must be **unique**. |
-| `make` | string | Manufacturer name |
-| `model` | string | Full display name on the chart |
-| `years` | string | Production years, e.g. `"1995–1998"` |
-| `category` | string | `"JDM"` \| `"Modern"` \| `"Exotic"` \| `"Muscle"` \| `"European"` |
-| `engine` | string | Engine description (shown in specs strip) |
-| `power` | string | Horsepower string (shown in specs strip) |
-| `avg_price` | integer | Current average market price in USD |
-| `low_price` | integer | Realistic entry-level price (not a basket case) |
-| `high_price` | integer | Top of typical range (not a record outlier) |
-| `prev_avg` | integer | Previous period average (sets the ▲/▼ delta) |
-| `color` | string | Hex color or `CHART_COLORS.<name>`. Must be visually distinct. |
-| `note` | string | One-sentence market insight (under 120 chars) |
-| `bat_url` | string | Link to listings (BaT, Cars.com, Edmunds, etc.) |
-| `market_url` | string | Link to market data (classic.com, KBB, CarGurus, etc.) |
-| `cost_to_own` | object | First-year ownership cost breakdown (see below) |
+To regenerate `data.js` locally without waiting for the Sunday cron:
 
-### cost_to_own sub-fields
+```bash
+cd ~/Desktop/garage-terminal
+python3 scraper/generate_history.py --dev
+```
 
-| Sub-field | Type | Notes |
-|-----------|------|-------|
-| `insurance_annual` | integer | Annual specialty insurance estimate (USD) |
-| `insurance_note` | string | Short note on insurance type/provider |
-| `import_duty_pct` | decimal | 0.025 for JDM imports (25-yr exemption). 0 for US-spec. |
-| `import_duty_est` | integer | Duty amount = avg_price × import_duty_pct. 0 for US-spec. |
-| `shipping_est` | integer | Shipping Japan → US West Coast (~$4,500). 0 for US-spec. |
-| `maintenance_annual` | integer | Annual maintenance estimate (USD) |
-| `maintenance_note` | string | Short note on what maintenance covers |
-| `total_first_year_extra` | integer | **Sum of all above** = duty + shipping + insurance + maintenance |
-
-> The `total_first_year_extra` field is what the dashboard uses for the
-> True Acquisition Cost display. You must calculate it manually — the
-> dashboard does not auto-sum the sub-fields.
-
----
-
-## Maximum watchlist size
-
-The dashboard comfortably handles up to **12 cars** in the sidebar before it
-gets crowded on mobile. Beyond that, consider splitting into multiple dashboards.
+This uses the `avg_price` values straight from `cars.config.js` and regenerates `data.js` for all cars. No scraping happens. Useful for previewing what the chart will look like before the next real scrape.
 
 ---
 
 ## Removing a car
 
-Delete its object from the `WATCHLIST` array in `cars.config.js`.
-Also remove it from `scraper/scrape_prices.py` if you added it there.
+Just delete its block from the array. The scraper, the data file, and the dashboard will all stop referencing it on the next run.
+
+If a user has the car in their localStorage watchlist (via the "Move to Watchlist" feature), they'll keep seeing it locally until they clear browser data — but new visitors won't.
 
 ---
 
-*Questions? All dashboard logic lives in `frontend/index.html`.
-The config file is loaded at line ~622 as `<script src="cars.config.js">`.*
+## Adding a category that isn't in the list
+
+The dashboard only shows averages for `JDM` and `Exotic` in the sidebar KPIs. If you add `Hypercar` or `Pre-war` or whatever as a new category, those cars work fine but don't get a dedicated KPI tile. To add one, edit `renderPortfolio()` in `index.html`:
+
+```js
+var hyperCars = WATCHLIST.filter(c => c.category === 'Hypercar');
+var hyperAvg  = hyperCars.length ? hyperCars.reduce((s,c)=>s+c.avg_price,0) / hyperCars.length : null;
+// then add a kpi-row entry for it
+```
+
+This is the only place where the file structure isn't fully driven by `cars.config.js`. Everything else is.
+
+---
+
+## Adding extra scrape sources for a specific car
+
+The default scraper hits two sources per car: classic.com (from `market_url`) and BaT (from `bat_url`). For most cars that's plenty.
+
+If a car needs additional sources — say, KBB for current modern cars or Edmunds for late-model exotics — add a `scrape_extras` field:
+
+```js
+{
+  id: 'r35-gtr-50th',
+  ...
+  bat_url:    'https://bringatrailer.com/search/?s=r35+gt-r+50th',
+  market_url: 'https://www.classic.com/m/nissan/gt-r/r35/',
+  scrape_extras: [
+    { type: 'kbb',     url: 'https://www.kbb.com/nissan/gt-r/2020/' },
+    { type: 'edmunds', url: 'https://www.edmunds.com/nissan/gt-r/2020/' },
+  ],
+  cost_to_own: { ... },
+},
+```
+
+Supported `type` values: `kbb`, `edmunds`, `cargurus`. The scraper averages every source that returns a valid price.
+
+This is optional — leave it off and the car gets the standard 2-source scrape.
+
+---
+
+## Troubleshooting
+
+**"My car shows up but the price is wrong."**
+The scraper either failed silently (network blip on Sunday) or the URLs aren't resolving. Check the GitHub Actions run log: Repo → Actions tab → most recent run. Look for the line `[your-car-id]` in the scraper output. If it says `using fallback`, the URLs need to be checked.
+
+**"My car doesn't show up at all."**
+Most likely a JS syntax error in `cars.config.js`. Open the dashboard, hit F12, look at the Console tab. The error will name the line.
+
+**"The detail modal opens but the sparkline is flat."**
+The car has `avg_price: 0` or no `avg_price`. The sparkline needs a non-zero value to anchor the walk.
+
+**"The 'Move to Watchlist' feature added the car but it's not on the deployed site."**
+That feature uses browser localStorage — it's local to that browser only. To make it permanent everywhere, click "Copy config snippet" in the modal, paste into `cars.config.js` WATCHLIST array, push to GitHub.
+
+**"I added 10 cars and the data.js file got huge."**
+Each car adds about 18-20KB of price history. 10 new cars = ~200KB extra in `data.js`. Still small by web standards (gzipped it's a fraction of that). If it ever becomes a real problem, the script can be updated to only generate history for WATCHLIST cars and let ticker cars use the JS-generated walk on demand. Not worth doing yet.
+
+---
+
+*Garage Terminal · Ghost Strategies · ghoststrategies.io*
