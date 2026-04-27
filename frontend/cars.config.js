@@ -138,7 +138,7 @@ var WATCHLIST = [
   },
 
   {
-    id:         '',
+    id:         'supra-a80',
     symbol:     'SUPRAA80',
     make:       'Toyota',
     model:      'Supra MK4 A80',
