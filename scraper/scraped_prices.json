@@ -1,0 +1,280 @@
+{
+  "scraped_at": "2026-05-03T02:44:43.857796+00:00Z",
+  "total_cars": 34,
+  "scraped": 16,
+  "fallback": 18,
+  "prices": {
+    "r33-gtr": {
+      "id": "r33-gtr",
+      "label": "Nissan Skyline R33 GT-R",
+      "avg_price": 38666,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:40:26.550045+00:00Z"
+    },
+    "r32-gtr": {
+      "id": "r32-gtr",
+      "label": "Nissan Skyline R32 GT-R",
+      "avg_price": 57372,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:40:33.609409+00:00Z"
+    },
+    "supra-a80": {
+      "id": "supra-a80",
+      "label": "Toyota Supra MK4 A80",
+      "avg_price": 52110,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:40:44.271003+00:00Z"
+    },
+    "r35-gtr": {
+      "id": "r35-gtr",
+      "label": "Nissan GT-R R35 (2020)",
+      "avg_price": 106000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:10.423036+00:00Z"
+    },
+    "huracan-sto": {
+      "id": "huracan-sto",
+      "label": "Lamborghini Huracan STO (2022)",
+      "avg_price": 427632,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:16.534367+00:00Z"
+    },
+    "nsx-na1": {
+      "id": "nsx-na1",
+      "label": "Honda NSX NA1",
+      "avg_price": 95000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:23.245681+00:00Z"
+    },
+    "fd-rx7": {
+      "id": "fd-rx7",
+      "label": "Mazda RX-7 FD3S",
+      "avg_price": 42000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:31.298055+00:00Z"
+    },
+    "evo-vi": {
+      "id": "evo-vi",
+      "label": "Mitsubishi Lancer Evolution VI TME",
+      "avg_price": 68000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:38.060535+00:00Z"
+    },
+    "sti-ra": {
+      "id": "sti-ra",
+      "label": "Subaru Impreza WRX STI Type RA",
+      "avg_price": 32650,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:41:45.077042+00:00Z"
+    },
+    "s15-spec": {
+      "id": "s15-spec",
+      "label": "Nissan Silvia S15 Spec R",
+      "avg_price": 35000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:51.765929+00:00Z"
+    },
+    "nsx-r": {
+      "id": "nsx-r",
+      "label": "Honda NSX Type R (NA2)",
+      "avg_price": 185000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:41:58.480728+00:00Z"
+    },
+    "ae86": {
+      "id": "ae86",
+      "label": "Toyota Sprinter Trueno / Corolla Levin",
+      "avg_price": 28000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:42:06.317760+00:00Z"
+    },
+    "r34-gtr": {
+      "id": "r34-gtr",
+      "label": "Nissan Skyline GT-R R34",
+      "avg_price": 168000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:42:14.182401+00:00Z"
+    },
+    "gto-3s": {
+      "id": "gto-3s",
+      "label": "Mitsubishi GTO Twin Turbo (JDM 3000GT VR-4)",
+      "avg_price": 22000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:42:22.070975+00:00Z"
+    },
+    "300zx-z32": {
+      "id": "300zx-z32",
+      "label": "Nissan 300ZX Twin Turbo Z32",
+      "avg_price": 32766,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:42:29.247430+00:00Z"
+    },
+    "fc-rx7": {
+      "id": "fc-rx7",
+      "label": "Mazda RX-7 FC3S Turbo II",
+      "avg_price": 11451,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:42:36.233730+00:00Z"
+    },
+    "mr2-sw20": {
+      "id": "mr2-sw20",
+      "label": "Toyota MR2 SW20 Turbo",
+      "avg_price": 24000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:42:43.065116+00:00Z"
+    },
+    "s13-240sx": {
+      "id": "s13-240sx",
+      "label": "Nissan 240SX S13 (Silvia/180SX)",
+      "avg_price": 19000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:42:49.722241+00:00Z"
+    },
+    "celica-gt4": {
+      "id": "celica-gt4",
+      "label": "Toyota Celica GT-Four ST205",
+      "avg_price": 15704,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:42:56.593793+00:00Z"
+    },
+    "lancer-evo4": {
+      "id": "lancer-evo4",
+      "label": "Mitsubishi Lancer Evolution IV",
+      "avg_price": 55000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:03.409210+00:00Z"
+    },
+    "458-spec": {
+      "id": "458-spec",
+      "label": "Ferrari 458 Speciale",
+      "avg_price": 390000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:10.196008+00:00Z"
+    },
+    "gt3rs-991": {
+      "id": "gt3rs-991",
+      "label": "Porsche 911 GT3 RS (991.2)",
+      "avg_price": 210000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:17.133768+00:00Z"
+    },
+    "aventador": {
+      "id": "aventador",
+      "label": "Lamborghini Aventador S",
+      "avg_price": 380600,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:43:24.029227+00:00Z"
+    },
+    "720s": {
+      "id": "720s",
+      "label": "McLaren 720S",
+      "avg_price": 265000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:31.841392+00:00Z"
+    },
+    "cayman-gt4": {
+      "id": "cayman-gt4",
+      "label": "Porsche 718 Cayman GT4",
+      "avg_price": 118000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:39.922908+00:00Z"
+    },
+    "f8-trib": {
+      "id": "f8-trib",
+      "label": "Ferrari F8 Tributo",
+      "avg_price": 340000,
+      "confidence": "fallback",
+      "sources_hit": 0,
+      "scraped_at": "2026-05-03T02:43:47.681095+00:00Z"
+    },
+    "vantage-gt3": {
+      "id": "vantage-gt3",
+      "label": "Aston Martin Vantage (V12 / GT3 spec)",
+      "avg_price": 108621,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:43:54.696353+00:00Z"
+    },
+    "mclaren-600lt": {
+      "id": "mclaren-600lt",
+      "label": "McLaren 600LT",
+      "avg_price": 192644,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:01.734170+00:00Z"
+    },
+    "amg-gtr": {
+      "id": "amg-gtr",
+      "label": "Mercedes-AMG GT R",
+      "avg_price": 124210,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:09.000856+00:00Z"
+    },
+    "m4-csl": {
+      "id": "m4-csl",
+      "label": "BMW M4 CSL",
+      "avg_price": 126896,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:15.822420+00:00Z"
+    },
+    "gt500-21": {
+      "id": "gt500-21",
+      "label": "Ford Mustang Shelby GT500",
+      "avg_price": 85077,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:22.947108+00:00Z"
+    },
+    "zl1-1le": {
+      "id": "zl1-1le",
+      "label": "Chevrolet Camaro ZL1 1LE",
+      "avg_price": 70103,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:29.923773+00:00Z"
+    },
+    "viper-acr": {
+      "id": "viper-acr",
+      "label": "Dodge Viper ACR (5th Gen)",
+      "avg_price": 132087,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:36.924152+00:00Z"
+    },
+    "corvette-z06": {
+      "id": "corvette-z06",
+      "label": "Chevrolet Corvette Z06 (C8)",
+      "avg_price": 11300,
+      "confidence": "scraped",
+      "sources_hit": 1,
+      "scraped_at": "2026-05-03T02:44:43.857586+00:00Z"
+    }
+  }
+}
