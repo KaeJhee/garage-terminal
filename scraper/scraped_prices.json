@@ -1,5 +1,5 @@
 {
-  "scraped_at": "2026-05-03T02:44:43.857796+00:00Z",
+  "scraped_at": "2026-05-10T02:47:28.625865+00:00Z",
   "total_cars": 34,
   "scraped": 16,
   "fallback": 18,
@@ -10,7 +10,7 @@
       "avg_price": 38666,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:40:26.550045+00:00Z"
+      "scraped_at": "2026-05-10T02:43:15.367464+00:00Z"
     },
     "r32-gtr": {
       "id": "r32-gtr",
@@ -18,15 +18,15 @@
       "avg_price": 57372,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:40:33.609409+00:00Z"
+      "scraped_at": "2026-05-10T02:43:22.609278+00:00Z"
     },
     "supra-a80": {
       "id": "supra-a80",
       "label": "Toyota Supra MK4 A80",
-      "avg_price": 52110,
+      "avg_price": 52326,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:40:44.271003+00:00Z"
+      "scraped_at": "2026-05-10T02:43:29.891916+00:00Z"
     },
     "r35-gtr": {
       "id": "r35-gtr",
@@ -34,7 +34,7 @@
       "avg_price": 106000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:10.423036+00:00Z"
+      "scraped_at": "2026-05-10T02:43:56.179120+00:00Z"
     },
     "huracan-sto": {
       "id": "huracan-sto",
@@ -42,7 +42,7 @@
       "avg_price": 427632,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:16.534367+00:00Z"
+      "scraped_at": "2026-05-10T02:44:02.322116+00:00Z"
     },
     "nsx-na1": {
       "id": "nsx-na1",
@@ -50,7 +50,7 @@
       "avg_price": 95000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:23.245681+00:00Z"
+      "scraped_at": "2026-05-10T02:44:09.118184+00:00Z"
     },
     "fd-rx7": {
       "id": "fd-rx7",
@@ -58,7 +58,7 @@
       "avg_price": 42000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:31.298055+00:00Z"
+      "scraped_at": "2026-05-10T02:44:17.292639+00:00Z"
     },
     "evo-vi": {
       "id": "evo-vi",
@@ -66,7 +66,7 @@
       "avg_price": 68000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:38.060535+00:00Z"
+      "scraped_at": "2026-05-10T02:44:24.034351+00:00Z"
     },
     "sti-ra": {
       "id": "sti-ra",
@@ -74,7 +74,7 @@
       "avg_price": 32650,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:41:45.077042+00:00Z"
+      "scraped_at": "2026-05-10T02:44:30.973710+00:00Z"
     },
     "s15-spec": {
       "id": "s15-spec",
@@ -82,7 +82,7 @@
       "avg_price": 35000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:51.765929+00:00Z"
+      "scraped_at": "2026-05-10T02:44:37.746169+00:00Z"
     },
     "nsx-r": {
       "id": "nsx-r",
@@ -90,7 +90,7 @@
       "avg_price": 185000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:41:58.480728+00:00Z"
+      "scraped_at": "2026-05-10T02:44:44.530120+00:00Z"
     },
     "ae86": {
       "id": "ae86",
@@ -98,7 +98,7 @@
       "avg_price": 28000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:42:06.317760+00:00Z"
+      "scraped_at": "2026-05-10T02:44:52.577846+00:00Z"
     },
     "r34-gtr": {
       "id": "r34-gtr",
@@ -106,7 +106,7 @@
       "avg_price": 168000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:42:14.182401+00:00Z"
+      "scraped_at": "2026-05-10T02:44:59.340124+00:00Z"
     },
     "gto-3s": {
       "id": "gto-3s",
@@ -114,15 +114,15 @@
       "avg_price": 22000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:42:22.070975+00:00Z"
+      "scraped_at": "2026-05-10T02:45:07.271825+00:00Z"
     },
     "300zx-z32": {
       "id": "300zx-z32",
       "label": "Nissan 300ZX Twin Turbo Z32",
-      "avg_price": 32766,
+      "avg_price": 32964,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:42:29.247430+00:00Z"
+      "scraped_at": "2026-05-10T02:45:14.738837+00:00Z"
     },
     "fc-rx7": {
       "id": "fc-rx7",
@@ -130,7 +130,7 @@
       "avg_price": 11451,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:42:36.233730+00:00Z"
+      "scraped_at": "2026-05-10T02:45:21.748153+00:00Z"
     },
     "mr2-sw20": {
       "id": "mr2-sw20",
@@ -138,7 +138,7 @@
       "avg_price": 24000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:42:43.065116+00:00Z"
+      "scraped_at": "2026-05-10T02:45:28.497931+00:00Z"
     },
     "s13-240sx": {
       "id": "s13-240sx",
@@ -146,7 +146,7 @@
       "avg_price": 19000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:42:49.722241+00:00Z"
+      "scraped_at": "2026-05-10T02:45:35.189699+00:00Z"
     },
     "celica-gt4": {
       "id": "celica-gt4",
@@ -154,7 +154,7 @@
       "avg_price": 15704,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:42:56.593793+00:00Z"
+      "scraped_at": "2026-05-10T02:45:42.097838+00:00Z"
     },
     "lancer-evo4": {
       "id": "lancer-evo4",
@@ -162,7 +162,7 @@
       "avg_price": 55000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:03.409210+00:00Z"
+      "scraped_at": "2026-05-10T02:45:48.807439+00:00Z"
     },
     "458-spec": {
       "id": "458-spec",
@@ -170,7 +170,7 @@
       "avg_price": 390000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:10.196008+00:00Z"
+      "scraped_at": "2026-05-10T02:45:55.587292+00:00Z"
     },
     "gt3rs-991": {
       "id": "gt3rs-991",
@@ -178,7 +178,7 @@
       "avg_price": 210000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:17.133768+00:00Z"
+      "scraped_at": "2026-05-10T02:46:02.449194+00:00Z"
     },
     "aventador": {
       "id": "aventador",
@@ -186,7 +186,7 @@
       "avg_price": 380600,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:43:24.029227+00:00Z"
+      "scraped_at": "2026-05-10T02:46:09.481517+00:00Z"
     },
     "720s": {
       "id": "720s",
@@ -194,7 +194,7 @@
       "avg_price": 265000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:31.841392+00:00Z"
+      "scraped_at": "2026-05-10T02:46:17.501775+00:00Z"
     },
     "cayman-gt4": {
       "id": "cayman-gt4",
@@ -202,7 +202,7 @@
       "avg_price": 118000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:39.922908+00:00Z"
+      "scraped_at": "2026-05-10T02:46:25.532256+00:00Z"
     },
     "f8-trib": {
       "id": "f8-trib",
@@ -210,15 +210,15 @@
       "avg_price": 340000,
       "confidence": "fallback",
       "sources_hit": 0,
-      "scraped_at": "2026-05-03T02:43:47.681095+00:00Z"
+      "scraped_at": "2026-05-10T02:46:32.301095+00:00Z"
     },
     "vantage-gt3": {
       "id": "vantage-gt3",
       "label": "Aston Martin Vantage (V12 / GT3 spec)",
-      "avg_price": 108621,
+      "avg_price": 102996,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:43:54.696353+00:00Z"
+      "scraped_at": "2026-05-10T02:46:39.543646+00:00Z"
     },
     "mclaren-600lt": {
       "id": "mclaren-600lt",
@@ -226,15 +226,15 @@
       "avg_price": 192644,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:01.734170+00:00Z"
+      "scraped_at": "2026-05-10T02:46:46.574926+00:00Z"
     },
     "amg-gtr": {
       "id": "amg-gtr",
       "label": "Mercedes-AMG GT R",
-      "avg_price": 124210,
+      "avg_price": 124113,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:09.000856+00:00Z"
+      "scraped_at": "2026-05-10T02:46:53.567422+00:00Z"
     },
     "m4-csl": {
       "id": "m4-csl",
@@ -242,7 +242,7 @@
       "avg_price": 126896,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:15.822420+00:00Z"
+      "scraped_at": "2026-05-10T02:47:00.459243+00:00Z"
     },
     "gt500-21": {
       "id": "gt500-21",
@@ -250,7 +250,7 @@
       "avg_price": 85077,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:22.947108+00:00Z"
+      "scraped_at": "2026-05-10T02:47:07.361863+00:00Z"
     },
     "zl1-1le": {
       "id": "zl1-1le",
@@ -258,7 +258,7 @@
       "avg_price": 70103,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:29.923773+00:00Z"
+      "scraped_at": "2026-05-10T02:47:14.459056+00:00Z"
     },
     "viper-acr": {
       "id": "viper-acr",
@@ -266,7 +266,7 @@
       "avg_price": 132087,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:36.924152+00:00Z"
+      "scraped_at": "2026-05-10T02:47:21.759503+00:00Z"
     },
     "corvette-z06": {
       "id": "corvette-z06",
@@ -274,7 +274,7 @@
       "avg_price": 11300,
       "confidence": "scraped",
       "sources_hit": 1,
-      "scraped_at": "2026-05-03T02:44:43.857586+00:00Z"
+      "scraped_at": "2026-05-10T02:47:28.625631+00:00Z"
     }
   }
 }
