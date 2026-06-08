@@ -46,6 +46,9 @@ SYNTHETIC_DAYS = 358
 ROLL_WINDOW    = 90    # trailing days for rolling median + band
 FRESH_DAYS     = 14    # a sale within this many days -> "observed" (fresh)
 STALE_DAYS     = 30    # no real sale in this many days -> stale flag
+WALK_DAYS    = 365
+PLAUSIBLE_LO = 0.25   # drop "sales" below 25% of tracked price
+PLAUSIBLE_HI = 4.0    # drop "sales" above 4x tracked price
 
 # ---------------------------------------------------------------------------
 # Config
@@ -134,81 +137,38 @@ def _pctl(vals, q):
     s=sorted(vals); k=(len(s)-1)*q; f=int(k); c=min(f+1,len(s)-1)
     return s[f] + (s[c]-s[f])*(k-f)
 
-def build_for_car(entry, today):
-    MANUAL_VENUES = ("manual", "manual-auto")
-    real = sorted([s for s in entry.get("sales",[]) if s.get("venue") not in MANUAL_VENUES], key=lambda s:s["date"])
-    # Prefer hand-curated "manual" points; fall back to auto-recorded if none.
-    user_manual = [s for s in entry.get("sales",[]) if s.get("venue")=="manual"]
-    auto_manual = [s for s in entry.get("sales",[]) if s.get("venue")=="manual-auto"]
-    manual = sorted(user_manual if user_manual else auto_manual, key=lambda s:s["date"])
-
-    # ---- MANUAL-ONLY car (no US market): stepped line of manually-sourced
-    # prices over time. These are real China-market prices you enter by hand
-    # (launch, each price cut), carried forward until the next update. Greyed
-    # + marked manual since they are not US auction transactions.
-    if not real:
-        if not manual:
-            return None, [], {}
-        mpts = manual  # already sorted by date
-        first = d(mpts[0]["date"])
-        start = first if (today - first).days >= ROLL_WINDOW else today - timedelta(days=ROLL_WINDOW)
-        line=[]; cur=start; mi=0
-        while cur <= today:
-            while mi+1 < len(mpts) and d(mpts[mi+1]["date"]) <= cur:
-                mi += 1
-            price = mpts[mi]["price"]
-            line.append({"date":cur.isoformat(),"price":price,"lo":price,"hi":price,"volume":0,"kind":"manual"})
-            cur += timedelta(days=1)
-        meta={"last_sale":None,"n_sales_90d":0,"median_90d":mpts[-1]["price"],"stale":True,
-              "confidence":"manual","as_of":mpts[-1]["date"]}
-        return line, [], meta
-
-    # ---- REAL-SALES car: rolling-90d median line + P25/P75 band + scatter ----
-    # Chart starts at the first real sale (no invented pre-history).
-    sale_dates=[d(s["date"]) for s in real]
-    sale_prices=[float(s["price"]) for s in real]
-    first_sale=sale_dates[0]
-    line=[]
-    last_median=None
-    cur=first_sale
-    while cur <= today:
-        lo_d=cur-timedelta(days=ROLL_WINDOW)
-        window=[sale_prices[i] for i,sd in enumerate(sale_dates) if lo_d <= sd <= cur]
-        if window:
-            med=round(statistics.median(window))
-            lo=round(_pctl(window,0.25)); hi=round(_pctl(window,0.75))
-            last_median=med
-            recent=any((cur-sd).days <= FRESH_DAYS for sd in sale_dates if sd<=cur)
-            kind="observed" if recent else "interpolated"
-            n=sum(1 for sd in sale_dates if sd==cur)
-        else:
-            med=last_median if last_median is not None else round(sale_prices[-1])
-            lo=hi=med; kind="stale"; n=0
-        line.append({"date":cur.isoformat(),"price":med,"lo":lo,"hi":hi,"volume":n,"kind":kind})
-        cur += timedelta(days=1)
-
-    # scatter = individual real sales
-    scatter=[{"date":s["date"],"price":round(s["price"]),"venue":s["venue"]} for s in real]
-
-    # meta
-    last_sale=sale_dates[-1]
-    win90=[sale_prices[i] for i,sd in enumerate(sale_dates) if (today-sd).days <= ROLL_WINDOW]
-    meta={"last_sale":last_sale.isoformat(),
-          "n_sales_90d":len(win90),
-          "median_90d":round(statistics.median(win90)) if win90 else last_median,
-          "stale":(today-last_sale).days > STALE_DAYS,
-          "confidence":"scraped",
-          "as_of":last_sale.isoformat()}
+def build_for_car(entry, today, avg_price):
+    if not avg_price or avg_price <= 0:
+        return None, [], {}
+    real = [s for s in entry.get("sales", []) if s.get("venue") not in ("manual", "manual-auto")]
+    lo_b, hi_b = avg_price * PLAUSIBLE_LO, avg_price * PLAUSIBLE_HI
+    clean = sorted([s for s in real if lo_b <= float(s["price"]) <= hi_b], key=lambda s: s["date"])
+    walk = make_synthetic_leadin(entry.get("_id", "car"), avg_price, today, days=WALK_DAYS)
+    line = [{"date": p["date"], "price": p["price"], "lo": p["price"], "hi": p["price"],
+             "volume": 0, "kind": "walk"} for p in walk]
+    scatter = [{"date": s["date"], "price": round(float(s["price"])), "venue": s["venue"]} for s in clean]
+    if clean:
+        sd = [d(s["date"]) for s in clean]; sp = [float(s["price"]) for s in clean]
+        win90 = [sp[i] for i, x in enumerate(sd) if (today - x).days <= ROLL_WINDOW]
+        meta = {"last_sale": sd[-1].isoformat(), "n_total": len(clean), "n_sales_90d": len(win90),
+                "median_90d": round(statistics.median(win90)) if win90 else round(statistics.median(sp)),
+                "stale": (today - sd[-1]).days > STALE_DAYS, "confidence": "estimate+sales",
+                "as_of": sd[-1].isoformat()}
+    else:
+        meta = {"last_sale": None, "n_total": 0, "n_sales_90d": 0, "median_90d": avg_price,
+                "stale": True, "confidence": "estimate", "as_of": None}
     return line, scatter, meta
 
-def build_data_js(history, today):
+def build_data_js(history, today, cfg):
     baked, sales, meta = {}, {}, {}
-    for cid, entry in history.items():
-        line, scat, m = build_for_car(entry, today)
+    for cid, c in cfg.items():
+        entry = dict(history.get(cid, {"sales": []}))
+        entry["_id"] = cid
+        line, scat, m = build_for_car(entry, today, c.get("avg_price", 0))
         if line:
-            baked[cid]=line
-            if scat: sales[cid]=scat
-            meta[cid]=m
+            baked[cid] = line
+            if scat: sales[cid] = scat
+            meta[cid] = m
     out = ("var BAKED_HISTORY = " + json.dumps(baked, separators=(",",":")) + ";\n" +
            "var BAKED_SALES = "   + json.dumps(sales, separators=(",",":")) + ";\n" +
            "var BAKED_META = "    + json.dumps(meta,  separators=(",",":")) + ";\n")
@@ -275,7 +235,7 @@ def run_generate(dev_mode):
             for cid,m in meta.items():
                 if m["avg_price"]:
                     history[cid]={"sales":[{"date":today_iso,"price":m["avg_price"],"venue":"manual"}]}
-        build_data_js(history,today)
+        build_data_js(history,today,meta)
         print("--  Dev mode: price_history.json + cars.config.js NOT modified"); print("Done."); return
 
     price_data,is_real=load_scrape()
@@ -298,7 +258,7 @@ def run_generate(dev_mode):
     real=sum(len([s for s in e["sales"] if s.get("venue") not in ("manual","manual-auto")]) for e in history.values())
     print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")
 
-    build_data_js(history,today)
+    build_data_js(history,today,meta)
     print("Patching cars.config.js (price + duty recompute)...")
     CONFIG_JS_PATH.write_text(patch_config_prices(CONFIG_JS_PATH.read_text(),price_data,meta))
     print("OK  Updated cars.config.js"); print("Done.")

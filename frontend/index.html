@@ -400,6 +400,7 @@ canvas { display: block; }
 .ms-badge.stale  { background: rgba(232,160,32,.16); color: var(--amber); }
 .ms-badge.manual { background: rgba(92,112,128,.16); color: var(--text-muted); }
 .ms-badge.thin   { background: rgba(240,110,110,.14); color: var(--red); }
+.ms-badge.est    { background: rgba(75,142,245,.14); color: var(--blue); }
 .cfg-btn {
   background: var(--panel); color: var(--text-muted); border: 1px solid var(--border);
   border-radius: 4px; padding: 5px 12px; font-family:'DM Mono',monospace; font-size: 11px;
@@ -1701,37 +1702,27 @@ function renderMarketStatus(car) {
   if (!meta) { el.innerHTML = ''; return; }
 
   var items = [];
-  // Confidence / staleness badge
-  if (meta.confidence === 'manual') {
-    items.push('<span class="ms-badge manual">MANUAL</span>');
-    items.push('<span class="ms-item">No live market data — run backfill to populate real sales</span>');
-  } else if (meta.stale) {
-    items.push('<span class="ms-badge stale">STALE</span>');
-    items.push('<span class="ms-item">No sale in 30+ days</span>');
-  } else {
-    items.push('<span class="ms-badge real">LIVE</span>');
-  }
-  // Sample size (90d) with thin-volume warning
-  if (meta.confidence !== 'manual') {
-    var n = meta.n_sales_90d || 0;
+  // Estimate-model badge: the line is indicative, anchored to the tracked price.
+  items.push('<span class="ms-badge est">EST</span>');
+  items.push('<span class="ms-item">indicative line, anchored to tracked price</span>');
+
+  var n = meta.n_total || 0;
+  if (n > 0) {
     var thin = n < 3;
     items.push('<span class="ms-item">' + (thin ? '<span class="ms-badge thin">THIN</span>' : '') +
-               '<span class="ms-val">' + n + '</span> sale' + (n===1?'':'s') + ' (90d)</span>');
-  }
-  // As-of date
-  if (meta.as_of) {
-    items.push('<span class="ms-item">as of <span class="ms-val">' + meta.as_of + '</span></span>');
-  }
-  // 90-day median reference
-  if (meta.median_90d) {
-    items.push('<span class="ms-item">90d median <span class="ms-val">' + fmt(meta.median_90d) + '</span></span>');
+               '<span class="ms-val">' + n + '</span> real BaT sale' + (n===1?'':'s') + ' plotted</span>');
+    if (meta.as_of) {
+      items.push('<span class="ms-item">last sale <span class="ms-val">' + meta.as_of + '</span></span>');
+    }
+  } else {
+    items.push('<span class="ms-item">no real sales on record</span>');
   }
   el.innerHTML = items.join('');
 }
 
 function dashForKind(kind) {
   // solid = real observed; dashed = inferred (interpolated); dotted/grey = stale/manual
-  if (kind === 'observed') return undefined;
+  if (kind === 'walk' || kind === 'observed') return undefined;
   if (kind === 'interpolated') return [5, 4];
   return [2, 4]; // stale / manual / synthetic
 }
@@ -1817,10 +1808,7 @@ function renderChart() {
             title: items => labels[items[0].dataIndex],
             label: item => {
               if (item.datasetIndex === 3) return 'Sale: ' + fmt(item.raw);
-              var k = kinds[item.dataIndex];
-              var tag = k === 'observed' ? '' : k === 'interpolated' ? ' (interp.)' :
-                        k === 'manual' ? ' (manual)' : ' (stale)';
-              return 'Median: ' + fmt(item.raw) + tag;
+              return 'Est: ' + fmt(item.raw);
             },
           }
         },
