@@ -418,6 +418,12 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
 
     # Price = MEDIAN of real sold transactions (resists outliers; right-skewed
     # collector prices make mean misleading). Asking prices never set the price.
+    if fallback:
+        lo_b, hi_b = fallback * 0.25, fallback * 4.0
+        kept = [p for p in sold_prices if lo_b <= p <= hi_b]
+        if len(kept) != len(sold_prices):
+            print(f"       filtered {len(sold_prices)-len(kept)} implausible price(s)")
+        sold_prices = kept
     if sold_prices:
         avg = int(statistics.median(sold_prices))
         confidence = "scraped"

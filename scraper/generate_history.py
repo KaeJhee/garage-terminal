@@ -30,7 +30,7 @@ ACCUMULATION:
   --dev writes nothing real (preview build only).
 """
 
-import argparse, json, random, re, subprocess, sys, time, statistics
+import argparse, hashlib, json, random, re, subprocess, sys, time, statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -62,7 +62,7 @@ def load_cars_from_config() -> dict:
         const fn=new Function(code+'; return {WATCHLIST,TICKER_UNIVERSE};');
         const d=fn(); const all=[...d.WATCHLIST,...d.TICKER_UNIVERSE]; const out={};
         all.forEach(c=>{ if(!c.id) return; const cto=c.cost_to_own||{};
-          out[c.id]={avg_price:c.avg_price||0,import_duty_pct:cto.import_duty_pct||0,
+          out[c.id]={avg_price:c.avg_price||0,low_price:c.low_price||0,high_price:c.high_price||0,import_duty_pct:cto.import_duty_pct||0,
             shipping_est:cto.shipping_est||0,registration_est:cto.registration_est||0,
             insurance_annual:cto.insurance_annual||0,maintenance_annual:cto.maintenance_annual||0}; });
         process.stdout.write(JSON.stringify(out));
@@ -81,7 +81,7 @@ def load_cars_from_config() -> dict:
 # ---------------------------------------------------------------------------
 
 def make_synthetic_leadin(car_id, end_price, end_date, days=SYNTHETIC_DAYS):
-    rng = random.Random(hash(car_id) & 0xffffffff)
+    rng = random.Random(int(hashlib.md5(str(car_id).encode()).hexdigest(), 16) & 0xffffffff)
     target = float(end_price); vol = target*0.018; mr = 0.015
     drift = rng.choice([-1,1]); start = target*(1+drift*rng.uniform(0.05,0.12))
     prices=[start]
@@ -169,6 +169,33 @@ def build_data_js(history, today, cfg):
     DATA_JS_PATH.write_text(out)
     stale=sum(1 for m in meta.values() if m.get("stale"))
     print(f"OK  data.js: {len(baked)} cars, {sum(len(s) for s in sales.values())} real sales, {stale} stale")
+    audit_anchors(cfg, history)
+
+def audit_anchors(cfg, history):
+    """Flag cars whose avg_price (the chart anchor) looks wrong, so a bad value
+    surfaces here instead of silently distorting a chart."""
+    warns = []
+    for cid, c in cfg.items():
+        avg = c.get("avg_price", 0)
+        if not avg:
+            continue
+        lo, hi = c.get("low_price", 0), c.get("high_price", 0)
+        if lo and avg < lo * 0.5:
+            warns.append(f"  !! {cid}: avg_price ${avg:,} far BELOW low_price ${lo:,}")
+        elif hi and avg > hi * 1.5:
+            warns.append(f"  !! {cid}: avg_price ${avg:,} far ABOVE high_price ${hi:,}")
+        raw = [float(s["price"]) for s in history.get(cid, {}).get("sales", [])
+               if s.get("venue") not in ("manual", "manual-auto")]
+        if len(raw) >= 3:
+            med = statistics.median(raw)
+            if med > avg * 3 or med < avg / 3:
+                warns.append(f"  !! {cid}: real-sales median ${med:,.0f} disagrees with avg_price ${avg:,} (>3x)")
+    if warns:
+        print("\n** ANCHOR AUDIT - review before trusting these charts:")
+        for w in warns:
+            print(w)
+    else:
+        print("\nAnchor audit: all avg_price anchors look consistent.")
 
 # ---------------------------------------------------------------------------
 # Config patch (price + duty recompute)
