@@ -150,7 +150,7 @@ var WATCHLIST = [
     prev_avg:   52258,
     color:      CHART_COLORS.green,
     note:       '2JZ legendary for 1000+ hp builds. Turbo coupes most sought.',
-    bat_url:    'https://bringatrailer.com/search/?s=toyota+supra+mk4',
+    bat_url:    'https://bringatrailer.com/search/?s=toyota+supra+turbo',
     market_url: 'https://www.cargurus.com/research/price-trends/Toyota-Supra-d309',
     cost_to_own: {
       insurance_annual:       800,
@@ -210,7 +210,7 @@ var WATCHLIST = [
     prev_avg:   419500,
     color:      CHART_COLORS.purple,
     note:       'Super Trofeo Omologata. Road-legal race spec. 37 US listings.',
-    bat_url:    'https://www.edmunds.com/used-lamborghini-huracan-sto/',
+    bat_url:    'https://bringatrailer.com/search/?s=huracan+sto',
     market_url: 'https://www.classic.com/m/lamborghini/huracan/sto/',
     cost_to_own: {
       insurance_annual:       8500,
@@ -434,7 +434,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   65764,
     color:      CHART_COLORS.cyan,
     note:       'Tommi Makinen Edition with red Recaros. CP9A chassis. Group A icon.',
-    bat_url:    'https://bringatrailer.com/search/?s=evo+vi+tme',
+    bat_url:    'https://bringatrailer.com/search/?s=lancer+evolution+vi',
     market_url: 'https://www.classic.com/m/mitsubishi/lancer-evolution/vi/',
     cost_to_own: {
       insurance_annual:       800,
@@ -546,7 +546,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   26390,
     color:      CHART_COLORS.gold,
     note:       'Initial D fame. GT-APEX trim with pop-up lights most sought.',
-    bat_url:    'https://bringatrailer.com/search/?s=ae86',
+    bat_url:    'https://bringatrailer.com/search/?s=toyota+corolla+gt-s',
     market_url: 'https://www.classic.com/m/toyota/corolla/ae86/',
     cost_to_own: {
       insurance_annual:       650,
@@ -574,7 +574,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   155125,
     color:      CHART_COLORS.indigo,
     note:       '25-yr exempt 2024-2027 by trim. V-Spec II Nur tops $400K at auction.',
-    bat_url:    'https://bringatrailer.com/search/?s=r34+gt-r',
+    bat_url:    'https://bringatrailer.com/search/?s=nissan+skyline+gt-r+r34',
     market_url: 'https://www.classic.com/m/nissan/skyline/r34/gt-r/',
     cost_to_own: {
       insurance_annual:       1500,
@@ -602,7 +602,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   22473,
     color:      CHART_COLORS.coral,
     note:       'AWD with active aero. JDM Z16A chassis equivalent to US 3000GT VR-4.',
-    bat_url:    'https://bringatrailer.com/search/?s=mitsubishi+gto',
+    bat_url:    'https://bringatrailer.com/search/?s=mitsubishi+3000gt+vr-4',
     market_url: 'https://www.classic.com/m/mitsubishi/3000gt/',
     cost_to_own: {
       insurance_annual:       650,
@@ -770,7 +770,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   53450,
     color:      CHART_COLORS.rose,
     note:       'CN9A chassis. First Evo with AYC active diff. Gateway to Evo collecting.',
-    bat_url:    'https://bringatrailer.com/search/?s=evo+iv',
+    bat_url:    'https://bringatrailer.com/search/?s=lancer+evolution+iv',
     market_url: 'https://www.classic.com/m/mitsubishi/lancer-evolution/iv/',
     cost_to_own: {
       insurance_annual:       750,
@@ -802,7 +802,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   383104,
     color:      CHART_COLORS.sky,
     note:       'Last NA V8 mid-engine Ferrari. Aperta convertibles command premium.',
-    bat_url:    'https://bringatrailer.com/search/?s=458+speciale',
+    bat_url:    'https://bringatrailer.com/search/?s=ferrari+458+speciale',
     market_url: 'https://www.classic.com/m/ferrari/458/speciale/',
     cost_to_own: {
       insurance_annual:       8000,

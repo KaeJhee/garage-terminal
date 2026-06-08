@@ -188,14 +188,26 @@ def merge_sales(history: dict, car_id: str, sales: list) -> int:
 # Fetch + run
 # ---------------------------------------------------------------------------
 
-def fetch(client, url):
-    try:
-        r = client.get(url, timeout=25, follow_redirects=True)
-        if r.status_code == 200:
-            return r.text
-        print(f"    HTTP {r.status_code} (BaT bot protection likely)")
-    except Exception as e:
-        print(f"    fetch error: {e}")
+def fetch(client, url, retries=1):
+    for attempt in range(retries + 1):
+        try:
+            r = client.get(url, timeout=25, follow_redirects=True)
+            if r.status_code == 200:
+                return r.text
+            # 403/404 on BaT search is often transient rate-limiting; retry once.
+            if r.status_code in (403, 404) and attempt < retries:
+                print(f"    HTTP {r.status_code} - retrying in {DELAY:.0f}s")
+                time.sleep(DELAY)
+                continue
+            print(f"    HTTP {r.status_code} (BaT bot protection likely)")
+            return None
+        except Exception as e:
+            if attempt < retries:
+                print(f"    fetch error: {e} - retrying in {DELAY:.0f}s")
+                time.sleep(DELAY)
+                continue
+            print(f"    fetch error: {e}")
+            return None
     return None
 
 def run(only_car=None, dry_run=False):
