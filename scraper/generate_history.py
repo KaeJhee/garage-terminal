@@ -2,318 +2,318 @@
 """
 generate_history.py
 ===================
-Reads scraped_prices.json (output of scrape_prices.py) and regenerates
-frontend/data.js with fresh 365-day price history for each car.
+Builds the chart data from REAL individual sales accumulated in
+frontend/price_history.json. Produces three objects in frontend/data.js:
 
-Also patches avg_price and prev_avg in cars.config.js so the watchlist
-header stats reflect the latest scraped price.
+  BAKED_HISTORY[id] = daily line: trailing-90-day MEDIAN of real sales,
+                      with a band (lo/hi = P25/P75) and a "kind" flag
+                      (observed | interpolated | stale | synthetic | manual).
+  BAKED_SALES[id]   = individual real sales [{date, price, venue}] for the
+                      transaction scatter.
+  BAKED_META[id]    = {last_sale, n_sales_90d, median_90d, stale, confidence,
+                      as_of} for the staleness + sample-size display.
 
-KEY DESIGN PRINCIPLE
---------------------
-This script reads cars.config.js as the single source of truth for
-fallback prices in --dev mode. You never edit this file when adding a
-new car. Just add the car to cars.config.js and the dev-mode fallback
-will use its avg_price automatically.
+DATA MODEL (price_history.json):
+  { "<id>": { "sales": [{date, price, venue}], "synthetic": [{date, price}] } }
+  venue: bat | carsandbids | classic_com | bat-backfill | manual
+  "manual" = fallback placeholder when no sold data exists (e.g. Chinese EVs,
+  or a week the scrape found nothing). Manual points are NOT real sales: they
+  render as a flat, greyed line and are excluded from the scatter.
 
-Usage:
-    # Normal (requires scraped_prices.json):
-    python scraper/generate_history.py
+ACCUMULATION:
+  - Each run reads scraped_prices.json. Real sold prices are appended as
+    individual sales dated to the scrape date, deduped by ISO week + venue.
+  - Fallback (no sold data) records ONE manual point for the week.
+  - First time a car is seen, a frozen synthetic lead-in is created so the
+    chart isn't empty. It only renders before the first real sale.
 
-    # Dev mode - uses fallback prices from cars.config.js, no scraper needed:
-    python scraper/generate_history.py --dev
-
-    # Watch mode - auto-regenerates every N minutes (default: 60):
-    python scraper/generate_history.py --watch
-    python scraper/generate_history.py --watch --interval 30
-
-    # Dev + watch (most useful for localhost):
-    python scraper/generate_history.py --dev --watch
+  --dev writes nothing real (preview build only).
 """
 
-import argparse
-import json
-import re
-import subprocess
-import sys
-import time
-import random
+import argparse, json, random, re, subprocess, sys, time, statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 UTC = timezone.utc
 
+ROOT               = Path(__file__).parent.parent
+SCRAPED_PATH       = ROOT / "scraper" / "scraped_prices.json"
+PRICE_HISTORY_PATH = ROOT / "frontend" / "price_history.json"
+DATA_JS_PATH       = ROOT / "frontend" / "data.js"
+CONFIG_JS_PATH     = ROOT / "frontend" / "cars.config.js"
+
+SYNTHETIC_DAYS = 358
+ROLL_WINDOW    = 90    # trailing days for rolling median + band
+FRESH_DAYS     = 14    # a sale within this many days -> "observed" (fresh)
+STALE_DAYS     = 30    # no real sale in this many days -> stale flag
+
 # ---------------------------------------------------------------------------
-# Paths
+# Config
 # ---------------------------------------------------------------------------
 
-ROOT           = Path(__file__).parent.parent
-SCRAPED_PATH   = ROOT / "scraper" / "scraped_prices.json"
-DATA_JS_PATH   = ROOT / "frontend" / "data.js"
-CONFIG_JS_PATH = ROOT / "frontend" / "cars.config.js"
-
-# ---------------------------------------------------------------------------
-# Load fallback prices from cars.config.js
-# ---------------------------------------------------------------------------
-
-def load_fallback_prices_from_config() -> dict[str, int]:
-    """
-    Read frontend/cars.config.js and return { car_id: avg_price } for every
-    car in WATCHLIST + TICKER_UNIVERSE. Used as the fallback when we don't
-    have fresh scraped data (--dev mode, or fallback-confidence cars).
-    """
+def load_cars_from_config() -> dict:
     if not CONFIG_JS_PATH.exists():
         raise SystemExit(f"cars.config.js not found at {CONFIG_JS_PATH}")
-
-    js_extractor = r"""
-        const fs = require('fs');
-        const path = process.argv[1];
-        const code = fs.readFileSync(path, 'utf-8');
-        const fn = new Function(code + '; return { WATCHLIST, TICKER_UNIVERSE };');
-        const data = fn();
-        const all = [...data.WATCHLIST, ...data.TICKER_UNIVERSE];
-        const out = {};
-        all.forEach(c => { if (c.id) out[c.id] = c.avg_price || 0; });
+    js = r"""
+        const fs=require('fs');
+        const code=fs.readFileSync(process.argv[1],'utf-8');
+        const fn=new Function(code+'; return {WATCHLIST,TICKER_UNIVERSE};');
+        const d=fn(); const all=[...d.WATCHLIST,...d.TICKER_UNIVERSE]; const out={};
+        all.forEach(c=>{ if(!c.id) return; const cto=c.cost_to_own||{};
+          out[c.id]={avg_price:c.avg_price||0,import_duty_pct:cto.import_duty_pct||0,
+            shipping_est:cto.shipping_est||0,registration_est:cto.registration_est||0,
+            insurance_annual:cto.insurance_annual||0,maintenance_annual:cto.maintenance_annual||0}; });
         process.stdout.write(JSON.stringify(out));
     """
     try:
-        result = subprocess.run(
-            ["node", "-e", js_extractor, str(CONFIG_JS_PATH)],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=15,
-        )
+        r = subprocess.run(["node","-e",js,str(CONFIG_JS_PATH)],
+                           capture_output=True, text=True, check=True, timeout=15)
     except FileNotFoundError:
-        raise SystemExit(
-            "Node.js is required to parse cars.config.js. Install it from "
-            "https://nodejs.org or via 'brew install node' on macOS."
-        )
+        raise SystemExit("Node.js is required to parse cars.config.js.")
     except subprocess.CalledProcessError as e:
-        raise SystemExit(
-            f"Failed to parse cars.config.js:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
-        )
-
-    return json.loads(result.stdout)
-
+        raise SystemExit(f"Failed to parse cars.config.js:\n{e.stderr}")
+    return json.loads(r.stdout)
 
 # ---------------------------------------------------------------------------
-# Price history generator
+# Helpers
 # ---------------------------------------------------------------------------
 
-def generate_history(
-    car_id: str,
-    target_price: int,
-    days: int = 365,
-    seed: int | None = None,
-) -> list[dict]:
-    """
-    Generate a realistic 365-day mean-reverting price series ending at
-    target_price. Ornstein-Uhlenbeck-style random walk - gradual drifts,
-    occasional spikes, mean reversion to the target.
-    """
-    rng = random.Random(seed or hash(car_id))
+def make_synthetic_leadin(car_id, end_price, end_date, days=SYNTHETIC_DAYS):
+    rng = random.Random(hash(car_id) & 0xffffffff)
+    target = float(end_price); vol = target*0.018; mr = 0.015
+    drift = rng.choice([-1,1]); start = target*(1+drift*rng.uniform(0.05,0.12))
+    prices=[start]
+    for _ in range(days-1):
+        prev=prices[-1]; pull=mr*(target-prev); shock=rng.gauss(0,vol)
+        if rng.random()<0.02: shock*=rng.uniform(2,4)
+        prices.append(max(prev+pull+shock, target*0.3))
+    prices[-1]=target
+    sd=end_date-timedelta(days=days)
+    return [{"date":(sd+timedelta(days=i)).isoformat(),"price":round(p,0)} for i,p in enumerate(prices)]
 
-    vol            = target_price * 0.018
-    drift_dir      = rng.choice([-1, 1])
-    start_price    = target_price * (1 + drift_dir * rng.uniform(0.05, 0.12))
-    mean_reversion = 0.015
+def iso_week(date_str):
+    y,w,_=datetime.fromisoformat(date_str).date().isocalendar(); return f"{y}-W{w:02d}"
 
-    prices = [start_price]
-    for _ in range(days - 1):
-        prev  = prices[-1]
-        pull  = mean_reversion * (target_price - prev)
-        shock = rng.gauss(0, vol)
-        if rng.random() < 0.02:
-            shock *= rng.uniform(2, 4)
-        new_price = max(prev + pull + shock, target_price * 0.3)
-        prices.append(new_price)
+def d(s): return datetime.fromisoformat(s).date()
 
-    prices[-1] = float(target_price)  # anchor endpoint
-
-    today      = datetime.now(UTC).date()
-    start_date = today - timedelta(days=days - 1)
-    history    = []
-    for i, price in enumerate(prices):
-        date = start_date + timedelta(days=i)
-        history.append({
-            "date":   date.isoformat(),
-            "price":  round(price, 0),
-            "volume": rng.randint(1, 15),
-        })
-
-    return history
-
+def load_price_history():
+    return json.loads(PRICE_HISTORY_PATH.read_text()) if PRICE_HISTORY_PATH.exists() else {}
 
 # ---------------------------------------------------------------------------
-# cars.config.js patcher (only patches cars with confidence: 'scraped')
+# Accumulation
 # ---------------------------------------------------------------------------
 
-def patch_config_prices(config_text: str, price_data: dict) -> str:
-    """
-    Replace avg_price and prev_avg in cars.config.js for each car that has
-    fresh scraped data. Patches both WATCHLIST and TICKER_UNIVERSE entries
-    by id - the regex matches by `id:` field, regardless of which array.
-    Skips cars with confidence: 'fallback'.
-    """
-    updated = config_text
+def add_real_sales(history, car_id, sold_prices, venues, today_iso):
+    """Add this week's real sold prices as individual sales dated today,
+    deduped by ISO week + forward venues (re-run same week replaces them)."""
+    entry = history.setdefault(car_id, {"sales": []})
+    this_week = iso_week(today_iso)
+    venue_tag = venues[0] if venues else "scrape"
+    # remove existing FORWARD sales (not backfill, not manual) for this ISO week
+    entry["sales"] = [s for s in entry["sales"]
+                      if not (s.get("venue") not in ("manual",) and "backfill" not in s.get("venue","")
+                              and iso_week(s["date"]) == this_week)]
+    for p in sold_prices:
+        entry["sales"].append({"date": today_iso, "price": round(p,0), "venue": venue_tag})
 
-    for car_id, result in price_data.items():
-        if result.get("confidence") != "scraped":
-            print(f"  --  {car_id}: skipping (fallback price, not scraped)")
-            continue
+def record_manual(history, car_id, price, today_iso):
+    """No sold data: auto-record ONE placeholder for this week (venue
+    'manual-auto'). Never touches hand-curated 'manual' points."""
+    entry = history.setdefault(car_id, {"sales": []})
+    this_week = iso_week(today_iso)
+    entry["sales"] = [s for s in entry["sales"]
+                      if not (s.get("venue")=="manual-auto" and iso_week(s["date"])==this_week)]
+    entry["sales"].append({"date": today_iso, "price": round(price,0), "venue": "manual-auto"})
 
-        new_avg   = result["avg_price"]
-        avg_match = re.search(
-            rf"(id:\s*['\"]){re.escape(car_id)}(['\"].*?avg_price:\s*)(\d+)",
-            updated,
-            re.DOTALL,
-        )
-        if avg_match:
-            old_avg  = int(avg_match.group(3))
-            new_prev = old_avg
+# ---------------------------------------------------------------------------
+# Build chart objects: rolling median line + band + scatter + meta
+# ---------------------------------------------------------------------------
 
-            updated = re.sub(
-                rf"(id:\s*['\"]){re.escape(car_id)}(['\"].*?avg_price:\s*)(\d+)",
-                lambda m: m.group(1) + car_id + m.group(2) + str(new_avg),
-                updated,
-                flags=re.DOTALL,
-            )
-            block_pattern = rf"(id:\s*['\"]){re.escape(car_id)}['\"].*?(?=\n  \{{|\Z)"
+def _pctl(vals, q):
+    if not vals: return None
+    s=sorted(vals); k=(len(s)-1)*q; f=int(k); c=min(f+1,len(s)-1)
+    return s[f] + (s[c]-s[f])*(k-f)
 
-            def replace_prev_avg(m):
-                block = m.group(0)
-                return re.sub(r"(prev_avg:\s*)(\d+)", rf"\g<1>{new_prev}", block)
+def build_for_car(entry, today):
+    MANUAL_VENUES = ("manual", "manual-auto")
+    real = sorted([s for s in entry.get("sales",[]) if s.get("venue") not in MANUAL_VENUES], key=lambda s:s["date"])
+    # Prefer hand-curated "manual" points; fall back to auto-recorded if none.
+    user_manual = [s for s in entry.get("sales",[]) if s.get("venue")=="manual"]
+    auto_manual = [s for s in entry.get("sales",[]) if s.get("venue")=="manual-auto"]
+    manual = sorted(user_manual if user_manual else auto_manual, key=lambda s:s["date"])
 
-            updated = re.sub(block_pattern, replace_prev_avg, updated, flags=re.DOTALL)
+    # ---- MANUAL-ONLY car (no US market): stepped line of manually-sourced
+    # prices over time. These are real China-market prices you enter by hand
+    # (launch, each price cut), carried forward until the next update. Greyed
+    # + marked manual since they are not US auction transactions.
+    if not real:
+        if not manual:
+            return None, [], {}
+        mpts = manual  # already sorted by date
+        first = d(mpts[0]["date"])
+        start = first if (today - first).days >= ROLL_WINDOW else today - timedelta(days=ROLL_WINDOW)
+        line=[]; cur=start; mi=0
+        while cur <= today:
+            while mi+1 < len(mpts) and d(mpts[mi+1]["date"]) <= cur:
+                mi += 1
+            price = mpts[mi]["price"]
+            line.append({"date":cur.isoformat(),"price":price,"lo":price,"hi":price,"volume":0,"kind":"manual"})
+            cur += timedelta(days=1)
+        meta={"last_sale":None,"n_sales_90d":0,"median_90d":mpts[-1]["price"],"stale":True,
+              "confidence":"manual","as_of":mpts[-1]["date"]}
+        return line, [], meta
 
-            print(f"  OK  {car_id}: avg_price {old_avg:,} -> {new_avg:,}  |  prev_avg -> {new_prev:,}")
+    # ---- REAL-SALES car: rolling-90d median line + P25/P75 band + scatter ----
+    # Chart starts at the first real sale (no invented pre-history).
+    sale_dates=[d(s["date"]) for s in real]
+    sale_prices=[float(s["price"]) for s in real]
+    first_sale=sale_dates[0]
+    line=[]
+    last_median=None
+    cur=first_sale
+    while cur <= today:
+        lo_d=cur-timedelta(days=ROLL_WINDOW)
+        window=[sale_prices[i] for i,sd in enumerate(sale_dates) if lo_d <= sd <= cur]
+        if window:
+            med=round(statistics.median(window))
+            lo=round(_pctl(window,0.25)); hi=round(_pctl(window,0.75))
+            last_median=med
+            recent=any((cur-sd).days <= FRESH_DAYS for sd in sale_dates if sd<=cur)
+            kind="observed" if recent else "interpolated"
+            n=sum(1 for sd in sale_dates if sd==cur)
         else:
-            print(f"  WARN  {car_id}: could not find block in config to patch")
+            med=last_median if last_median is not None else round(sale_prices[-1])
+            lo=hi=med; kind="stale"; n=0
+        line.append({"date":cur.isoformat(),"price":med,"lo":lo,"hi":hi,"volume":n,"kind":kind})
+        cur += timedelta(days=1)
 
+    # scatter = individual real sales
+    scatter=[{"date":s["date"],"price":round(s["price"]),"venue":s["venue"]} for s in real]
+
+    # meta
+    last_sale=sale_dates[-1]
+    win90=[sale_prices[i] for i,sd in enumerate(sale_dates) if (today-sd).days <= ROLL_WINDOW]
+    meta={"last_sale":last_sale.isoformat(),
+          "n_sales_90d":len(win90),
+          "median_90d":round(statistics.median(win90)) if win90 else last_median,
+          "stale":(today-last_sale).days > STALE_DAYS,
+          "confidence":"scraped",
+          "as_of":last_sale.isoformat()}
+    return line, scatter, meta
+
+def build_data_js(history, today):
+    baked, sales, meta = {}, {}, {}
+    for cid, entry in history.items():
+        line, scat, m = build_for_car(entry, today)
+        if line:
+            baked[cid]=line
+            if scat: sales[cid]=scat
+            meta[cid]=m
+    out = ("var BAKED_HISTORY = " + json.dumps(baked, separators=(",",":")) + ";\n" +
+           "var BAKED_SALES = "   + json.dumps(sales, separators=(",",":")) + ";\n" +
+           "var BAKED_META = "    + json.dumps(meta,  separators=(",",":")) + ";\n")
+    DATA_JS_PATH.write_text(out)
+    stale=sum(1 for m in meta.values() if m.get("stale"))
+    print(f"OK  data.js: {len(baked)} cars, {sum(len(s) for s in sales.values())} real sales, {stale} stale")
+
+# ---------------------------------------------------------------------------
+# Config patch (price + duty recompute)
+# ---------------------------------------------------------------------------
+
+def patch_config_prices(config_text, price_data, meta):
+    updated=config_text
+    for cid,result in price_data.items():
+        if result.get("confidence")!="scraped": 
+            print(f"  --  {cid}: skip patch (fallback)"); continue
+        new_avg=int(round(result["price"]))
+        idm=re.search(rf"id:\s*['\"]{re.escape(cid)}['\"]", updated)
+        if not idm: print(f"  WARN {cid}: id not found"); continue
+        bs=idm.start(); be=updated.find("\n  },",bs)
+        if be==-1: print(f"  WARN {cid}: block end not found"); continue
+        be+=len("\n  },"); block=updated[bs:be]
+        oam=re.search(r"avg_price:\s*(\d+)",block)
+        if not oam: continue
+        old_avg=int(oam.group(1)); m=meta.get(cid,{}); pct=m.get("import_duty_pct",0)
+        nd=int(round(new_avg*pct))
+        nt=nd+m.get("shipping_est",0)+m.get("registration_est",0)+m.get("insurance_annual",0)+m.get("maintenance_annual",0)
+        nb=re.sub(r"(avg_price:\s*)\d+",rf"\g<1>{new_avg}",block,count=1)
+        nb=re.sub(r"(prev_avg:\s*)\d+",rf"\g<1>{old_avg}",nb,count=1)
+        if pct>0:
+            nb=re.sub(r"(import_duty_est:\s*)\d+",rf"\g<1>{nd}",nb,count=1)
+            nb=re.sub(r"(total_first_year_extra:\s*)\d+",rf"\g<1>{nt}",nb,count=1)
+        updated=updated[:bs]+nb+updated[be:]
+        print(f"  OK  {cid}: avg {old_avg:,}->{new_avg:,} duty->{nd:,}")
     return updated
 
-
 # ---------------------------------------------------------------------------
-# Load prices - scraped file or dev fallback
-# ---------------------------------------------------------------------------
-
-def load_prices(dev_mode: bool) -> tuple[dict, bool]:
-    """
-    Returns (price_data_dict, is_scraped).
-    price_data_dict format: { car_id: { "avg_price": int, "confidence": str } }
-    """
-    if not dev_mode and SCRAPED_PATH.exists():
-        scraped    = json.loads(SCRAPED_PATH.read_text())
-        price_data = scraped["prices"]
-        print(f"Loaded {len(price_data)} car prices from scraped_prices.json")
-        return price_data, True
-
-    if not dev_mode and not SCRAPED_PATH.exists():
-        print("WARN  scraped_prices.json not found - switching to dev mode automatically.")
-        print("      (Run scrape_prices.py to get live prices.)")
-
-    # Dev fallback: load every car from cars.config.js as the source of truth
-    fallback = load_fallback_prices_from_config()
-    price_data = {
-        car_id: {"avg_price": price, "confidence": "fallback"}
-        for car_id, price in fallback.items()
-    }
-    print(f"Dev mode: loaded fallback prices for {len(price_data)} cars from cars.config.js")
-    return price_data, False
-
-
-# ---------------------------------------------------------------------------
-# Core generate function
+# Load scrape
 # ---------------------------------------------------------------------------
 
-def run_generate(dev_mode: bool) -> None:
-    print("-" * 60)
-    print(f"Generating  {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}")
-
-    price_data, is_scraped = load_prices(dev_mode)
-
-    # Generate 365-day history for every car with a price
-    baked = {}
-    for car_id, result in price_data.items():
-        avg = result["avg_price"]
-        if not avg:
-            print(f"  --  {car_id}: skipping (no price)")
-            continue
-        history = generate_history(
-            car_id=car_id,
-            target_price=avg,
-            days=365,
-            seed=int(datetime.now(UTC).strftime("%Y%W")) + hash(car_id) % 10000,
-        )
-        baked[car_id] = history
-        print(f"  {car_id}: {len(history)} days  latest=${history[-1]['price']:,.0f}")
-
-    # Write data.js
-    data_js = "var BAKED_HISTORY = " + json.dumps(baked, separators=(",", ":")) + ";\n"
-    DATA_JS_PATH.write_text(data_js)
-    size_kb = DATA_JS_PATH.stat().st_size / 1024
-    print(f"OK  Wrote frontend/data.js  ({size_kb:.0f} KB, {len(baked)} cars)")
-
-    # Only patch cars.config.js if we have real scraped data
-    if is_scraped:
-        print("Patching cars.config.js prices...")
-        config_text = CONFIG_JS_PATH.read_text()
-        patched     = patch_config_prices(config_text, price_data)
-        CONFIG_JS_PATH.write_text(patched)
-        print("OK  Updated cars.config.js")
-    else:
-        print("--  Skipping cars.config.js patch (dev/fallback mode)")
-
-    print("Done.")
-
+def load_scrape():
+    if not SCRAPED_PATH.exists():
+        print("WARN  scraped_prices.json not found"); return {}, False
+    scraped=json.loads(SCRAPED_PATH.read_text()); out={}
+    for cid,r in scraped.get("prices",{}).items():
+        out[cid]={"price":r.get("avg_price",0),"confidence":r.get("confidence","scraped"),
+                  "sold_prices":r.get("sold_prices",[]),"venues":r.get("venues",[]),
+                  "n_sales":r.get("n_sales",0)}
+    print(f"Loaded {len(out)} scraped prices")
+    return out, True
 
 # ---------------------------------------------------------------------------
-# Main
+# Core
 # ---------------------------------------------------------------------------
+
+def run_generate(dev_mode):
+    print("-"*60); print(f"Generating  {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}")
+    meta=load_cars_from_config(); today=datetime.now(UTC).date(); today_iso=today.isoformat()
+
+    if dev_mode:
+        history=load_price_history()
+        if not history:
+            print("Dev: no price_history.json, ephemeral preview")
+            for cid,m in meta.items():
+                if m["avg_price"]:
+                    history[cid]={"sales":[{"date":today_iso,"price":m["avg_price"],"venue":"manual"}]}
+        build_data_js(history,today)
+        print("--  Dev mode: price_history.json + cars.config.js NOT modified"); print("Done."); return
+
+    price_data,is_real=load_scrape()
+    if not is_real or not price_data:
+        print("Falling back to cars.config.js avg_price (manual points this week)")
+        price_data={cid:{"price":m["avg_price"],"confidence":"fallback","sold_prices":[],"venues":[],"n_sales":0}
+                    for cid,m in meta.items() if m["avg_price"]}
+
+    history=load_price_history()
+    for cid,obs in price_data.items():
+        if obs["confidence"]=="scraped" and obs["sold_prices"]:
+            add_real_sales(history,cid,obs["sold_prices"],obs["venues"],today_iso)
+        elif obs["price"]:
+            # Defer to hand-curated manual points if the user owns this car's history
+            entry = history.get(cid, {})
+            has_user_manual = any(s.get("venue")=="manual" for s in entry.get("sales",[]))
+            if not has_user_manual:
+                record_manual(history,cid,obs["price"],today_iso)
+    PRICE_HISTORY_PATH.write_text(json.dumps(history,separators=(",",":")))
+    real=sum(len([s for s in e["sales"] if s.get("venue") not in ("manual","manual-auto")]) for e in history.values())
+    print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")
+
+    build_data_js(history,today)
+    print("Patching cars.config.js (price + duty recompute)...")
+    CONFIG_JS_PATH.write_text(patch_config_prices(CONFIG_JS_PATH.read_text(),price_data,meta))
+    print("OK  Updated cars.config.js"); print("Done.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Garage Terminal - History Generator")
-    parser.add_argument(
-        "--dev",
-        action="store_true",
-        help="Use cars.config.js avg_price values instead of scraped_prices.json",
-    )
-    parser.add_argument(
-        "--watch",
-        action="store_true",
-        help="Keep running and regenerate data.js on a timer",
-    )
-    parser.add_argument(
-        "--interval",
-        type=int,
-        default=60,
-        metavar="MINUTES",
-        help="How often to regenerate in --watch mode (default: 60 minutes)",
-    )
-    args = parser.parse_args()
-
-    print("=" * 60)
-    print("GARAGE TERMINAL - History Generator")
-    if args.dev:
-        print("Mode: DEV (fallback prices from cars.config.js, no scraper needed)")
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--dev",action="store_true"); ap.add_argument("--watch",action="store_true")
+    ap.add_argument("--interval",type=int,default=60); args=ap.parse_args()
+    print("="*60); print("GARAGE TERMINAL - History Accumulator (rolling median + scatter)")
+    if args.dev: print("Mode: DEV (no real writes)")
+    print("="*60)
+    run_generate(args.dev)
     if args.watch:
-        print(f"Mode: WATCH (regenerating every {args.interval} min)")
-    print("=" * 60)
-
-    run_generate(dev_mode=args.dev)
-
-    if args.watch:
-        interval_secs = args.interval * 60
-        print(f"\nWatching - next run in {args.interval} min  (Ctrl+C to stop)\n")
         try:
-            while True:
-                time.sleep(interval_secs)
-                run_generate(dev_mode=args.dev)
-                print(f"Next run in {args.interval} min  (Ctrl+C to stop)\n")
-        except KeyboardInterrupt:
-            print("\nStopped.")
-            sys.exit(0)
+            while True: time.sleep(args.interval*60); run_generate(args.dev)
+        except KeyboardInterrupt: print("\nStopped."); sys.exit(0)
 
-
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()

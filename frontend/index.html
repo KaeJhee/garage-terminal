@@ -386,6 +386,62 @@ canvas { display: block; }
 }
 .p-btn:hover { border-color: var(--text-muted); color: var(--text); }
 .p-btn.active { background: var(--amber); color: #080a0c; border-color: var(--amber); font-weight: 600; }
+.market-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+  letter-spacing: .03em;
+}
+.market-status .ms-item { display: inline-flex; align-items: center; gap: 5px; }
+.market-status .ms-dot { width: 6px; height: 6px; border-radius: 50%; }
+.market-status .ms-val { color: var(--text); }
+.ms-badge { padding: 1px 7px; border-radius: 3px; font-weight: 600; font-size: 9px; letter-spacing: .06em; }
+.ms-badge.real   { background: rgba(58,184,110,.14); color: var(--green); }
+.ms-badge.stale  { background: rgba(232,160,32,.16); color: var(--amber); }
+.ms-badge.manual { background: rgba(92,112,128,.16); color: var(--text-muted); }
+.ms-badge.thin   { background: rgba(240,110,110,.14); color: var(--red); }
+.cfg-btn {
+  background: var(--panel); color: var(--text-muted); border: 1px solid var(--border);
+  border-radius: 4px; padding: 5px 12px; font-family:'DM Mono',monospace; font-size: 11px;
+  letter-spacing:.04em; cursor: pointer; transition: all .15s;
+}
+.cfg-btn:hover { border-color: var(--amber); color: var(--amber); }
+.cfg-btn.primary { background: var(--amber); color:#080a0c; border-color: var(--amber); font-weight:600; }
+.cfg-btn.primary:hover { opacity:.9; }
+.cfg-backdrop { position: fixed; inset:0; background: rgba(0,0,0,.6); z-index: 200; display:none; }
+.cfg-backdrop.open { display:block; }
+.cfg-modal {
+  position: fixed; top:50%; left:50%; transform: translate(-50%,-50%) scale(.98);
+  width: min(840px, 94vw); max-height: 88vh; background: var(--panel);
+  border:1px solid var(--border); border-radius: 8px; z-index: 201; display:none;
+  flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.cfg-modal.open { display:flex; }
+.cfg-head { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border); }
+.cfg-title { font-family:'DM Mono',monospace; font-size:13px; color:var(--text); letter-spacing:.06em; }
+.cfg-sub { color:var(--text-muted); font-size:11px; }
+.cfg-x { background:none; border:none; color:var(--text-muted); font-size:22px; cursor:pointer; line-height:1; }
+.cfg-x:hover { color:var(--text); }
+.cfg-body { padding:14px 18px; overflow-y:auto; }
+.cfg-toolbar { display:flex; justify-content:space-between; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.cfg-toolbar-right { display:flex; gap:8px; flex-wrap:wrap; }
+.cfg-sec { font-family:'DM Mono',monospace; font-size:10px; color:var(--text-muted); letter-spacing:.08em; margin:14px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+.cfg-row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,.03); }
+.cfg-row-sym { font-family:'DM Mono',monospace; font-size:11px; color:var(--amber); width:90px; }
+.cfg-row-name { flex:1; font-size:12px; color:var(--text); }
+.cfg-row-price { font-family:'DM Mono',monospace; font-size:11px; color:var(--text-muted); }
+.cfg-mini { background:var(--bg); border:1px solid var(--border); color:var(--text-muted); border-radius:3px; padding:3px 9px; font-size:10px; cursor:pointer; font-family:'DM Mono',monospace; }
+.cfg-mini:hover { border-color:var(--amber); color:var(--amber); }
+.cfg-mini.danger:hover { border-color:var(--red); color:var(--red); }
+.cfg-hint, .cfg-form-actions { margin-top:12px; }
+.cfg-hint { font-size:11px; color:var(--text-muted); line-height:1.5; border-top:1px solid var(--border); padding-top:10px; }
+.cfg-form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:9px 14px; }
+.cfg-lbl { display:flex; flex-direction:column; gap:3px; font-family:'DM Mono',monospace; font-size:10px; color:var(--text-muted); letter-spacing:.03em; }
+.cfg-note-full { margin-top:9px; }
+.cfg-lbl input, .cfg-lbl select { background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:6px 8px; font-family:'DM Mono',monospace; font-size:12px; }
+.cfg-lbl input:focus, .cfg-lbl select:focus { outline:none; border-color:var(--amber); }
+.cfg-form-actions { display:flex; justify-content:flex-end; gap:8px; }
+@media (max-width:600px){ .cfg-form-grid { grid-template-columns:1fr; } }
 .chart-lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
 .chart-wrap {
   /* Fixed height chart so it doesn't collapse */
@@ -1045,6 +1101,7 @@ canvas { display: block; }
     <span class="logo-sub">// Ghost Strategies</span>
   </div>
   <div class="topbar-right">
+    <button class="cfg-btn" onclick="openConfigEditor()" title="Edit cars / config">⚙ CONFIG</button>
     <div class="status-pill"><div class="live-dot"></div>LIVE</div>
     <div class="status-pill">5 TRACKED</div>
     <div class="topbar-time" id="clock">--:--:--</div>
@@ -1119,6 +1176,7 @@ canvas { display: block; }
       <div class="chart-wrap">
         <canvas id="priceChart"></canvas>
       </div>
+      <div id="marketStatus" class="market-status"></div>
     </div>
 
     <!-- Specs -->
@@ -1343,6 +1401,22 @@ var TICKER_DATA = TICKER_UNIVERSE.map(function(t) {
 const fmt   = n => '$' + Number(n).toLocaleString('en-US', {maximumFractionDigits:0});
 const fmtK  = n => n >= 1000000 ? '$'+(n/1000000).toFixed(1)+'M' : n >= 1000 ? '$'+Math.round(n/1000)+'K' : fmt(n);
 const fmtPct= n => (n>=0?'+':'')+Number(n).toFixed(2)+'%';
+
+// Derive import duty + total first-year extra LIVE from avg_price so they
+// never drift when prices update. import_duty_est = avg_price * duty_pct;
+// total = duty + the flat (price-independent) cost components. Stored
+// import_duty_est / total_first_year_extra in cars.config.js are ignored
+// for display — this is always the source of truth.
+function ctoDerived(car) {
+  var cto = car.cost_to_own || {};
+  var duty = Math.round((car.avg_price || 0) * (cto.import_duty_pct || 0));
+  var total = duty
+            + (cto.shipping_est || 0)
+            + (cto.registration_est || 0)
+            + (cto.insurance_annual || 0)
+            + (cto.maintenance_annual || 0);
+  return { duty: duty, total: total };
+}
 
 // ============================================================
 // STATE
@@ -1620,6 +1694,48 @@ function renderPeriodStats(stats) {
   </div>`).join('');
 }
 
+function renderMarketStatus(car) {
+  var el = document.getElementById('marketStatus');
+  if (!el) return;
+  var meta = (typeof BAKED_META !== 'undefined' && BAKED_META[car.id]) || null;
+  if (!meta) { el.innerHTML = ''; return; }
+
+  var items = [];
+  // Confidence / staleness badge
+  if (meta.confidence === 'manual') {
+    items.push('<span class="ms-badge manual">MANUAL</span>');
+    items.push('<span class="ms-item">No live market data — run backfill to populate real sales</span>');
+  } else if (meta.stale) {
+    items.push('<span class="ms-badge stale">STALE</span>');
+    items.push('<span class="ms-item">No sale in 30+ days</span>');
+  } else {
+    items.push('<span class="ms-badge real">LIVE</span>');
+  }
+  // Sample size (90d) with thin-volume warning
+  if (meta.confidence !== 'manual') {
+    var n = meta.n_sales_90d || 0;
+    var thin = n < 3;
+    items.push('<span class="ms-item">' + (thin ? '<span class="ms-badge thin">THIN</span>' : '') +
+               '<span class="ms-val">' + n + '</span> sale' + (n===1?'':'s') + ' (90d)</span>');
+  }
+  // As-of date
+  if (meta.as_of) {
+    items.push('<span class="ms-item">as of <span class="ms-val">' + meta.as_of + '</span></span>');
+  }
+  // 90-day median reference
+  if (meta.median_90d) {
+    items.push('<span class="ms-item">90d median <span class="ms-val">' + fmt(meta.median_90d) + '</span></span>');
+  }
+  el.innerHTML = items.join('');
+}
+
+function dashForKind(kind) {
+  // solid = real observed; dashed = inferred (interpolated); dotted/grey = stale/manual
+  if (kind === 'observed') return undefined;
+  if (kind === 'interpolated') return [5, 4];
+  return [2, 4]; // stale / manual / synthetic
+}
+
 function renderChart() {
   const car = WATCHLIST.find(c=>c.id===activeId);
   if (!car) return;
@@ -1627,20 +1743,36 @@ function renderChart() {
   const history = getHistory(activeId, activePeriod);
   const labels  = history.map(d=>d.date);
   const prices  = history.map(d=>d.price);
+  const los     = history.map(d=>d.lo != null ? d.lo : d.price);
+  const his     = history.map(d=>d.hi != null ? d.hi : d.price);
+  const kinds   = history.map(d=>d.kind || 'observed');
 
   renderPeriodStats(calcStats(history));
+  renderMarketStatus(car);
+
+  // Real-sale scatter, aligned to the visible date range (one dot per sale date)
+  var sales = (typeof BAKED_SALES !== 'undefined' && BAKED_SALES[activeId]) || [];
+  var labelSet = {}; labels.forEach(function(dt,i){ labelSet[dt]=i; });
+  var byDate = {};
+  sales.forEach(function(s){
+    if (s.date in labelSet) {
+      (byDate[s.date] = byDate[s.date] || []).push(s.price);
+    }
+  });
+  var scatter = labels.map(function(dt){
+    if (byDate[dt]) { var a=byDate[dt].slice().sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; }
+    return null;
+  });
 
   const canvas = document.getElementById('priceChart');
   const ctx    = canvas.getContext('2d');
 
-  // Gradient under the line
   const grad = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 300);
-  grad.addColorStop(0, car.color+'44');
+  grad.addColorStop(0, car.color+'22');
   grad.addColorStop(1, car.color+'00');
 
   if (chart) { chart.destroy(); chart = null; }
 
-  // Thin x-axis labels
   const skip = Math.max(1, Math.floor(labels.length/7));
   const displayLabels = labels.map((l,i) => i%skip===0 ? l.slice(5) : '');
 
@@ -1648,54 +1780,59 @@ function renderChart() {
     type: 'line',
     data: {
       labels: displayLabels,
-      datasets: [{
-        data: prices,
-        borderColor: car.color,
-        borderWidth: 1.5,
-        backgroundColor: grad,
-        fill: true,
-        tension: 0.3,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        pointHoverBackgroundColor: car.color,
-        pointHoverBorderColor: '#080a0c',
-        pointHoverBorderWidth: 2,
-      }]
+      datasets: [
+        { // band upper (fills down to lower)
+          label: 'hi', data: his, borderColor: 'transparent', borderWidth: 0,
+          pointRadius: 0, fill: '+1', backgroundColor: car.color+'14', tension: 0.2, order: 4,
+        },
+        { // band lower
+          label: 'lo', data: los, borderColor: 'transparent', borderWidth: 0,
+          pointRadius: 0, fill: false, tension: 0.2, order: 4,
+        },
+        { // rolling-90d median line, styled by data kind
+          label: 'median', data: prices, borderColor: car.color, borderWidth: 1.6,
+          backgroundColor: grad, fill: false, tension: 0.2,
+          pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: car.color,
+          pointHoverBorderColor: '#080a0c', pointHoverBorderWidth: 2, order: 1,
+          segment: { borderDash: c => dashForKind(kinds[c.p1DataIndex]) },
+        },
+        { // real-sale scatter dots
+          label: 'sales', data: scatter, showLine: false,
+          pointRadius: 3.2, pointHoverRadius: 5,
+          pointBackgroundColor: car.color, pointBorderColor: '#0c0f13', pointBorderWidth: 1,
+          order: 0,
+        },
+      ]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       interaction: { mode:'index', intersect:false },
       plugins: {
         legend: { display:false },
         tooltip: {
-          backgroundColor: '#111418',
-          borderColor: '#252d38',
-          borderWidth: 1,
-          titleColor: '#5c7080',
-          bodyColor: '#c8d4de',
-          padding: 10,
-          displayColors: false,
+          backgroundColor: '#111418', borderColor: '#252d38', borderWidth: 1,
+          titleColor: '#5c7080', bodyColor: '#c8d4de', padding: 10, displayColors: false,
+          filter: item => item.datasetIndex === 2 || (item.datasetIndex === 3 && item.raw != null),
           callbacks: {
             title: items => labels[items[0].dataIndex],
-            label: item  => 'Avg: ' + fmt(item.raw),
+            label: item => {
+              if (item.datasetIndex === 3) return 'Sale: ' + fmt(item.raw);
+              var k = kinds[item.dataIndex];
+              var tag = k === 'observed' ? '' : k === 'interpolated' ? ' (interp.)' :
+                        k === 'manual' ? ' (manual)' : ' (stale)';
+              return 'Median: ' + fmt(item.raw) + tag;
+            },
           }
         },
       },
       scales: {
-        x: {
-          grid:   { color:'#141920', drawTicks:false },
-          border: { color:'#1e2530' },
-          ticks:  { color:'#3a4a58', font:{family:"'DM Mono',monospace",size:9}, maxRotation:0 }
-        },
-        y: {
-          position: 'right',
-          grid:   { color:'#141920', drawTicks:false },
-          border: { color:'#1e2530', dash:[3,3] },
-          ticks:  { color:'#5c7080', font:{family:"'DM Mono',monospace",size:10}, callback:v=>fmtK(v), maxTicksLimit:5 }
-        }
+        x: { grid:{ color:'#141920', drawTicks:false }, border:{ color:'#1e2530' },
+             ticks:{ color:'#3a4a58', font:{family:"'DM Mono',monospace",size:9}, maxRotation:0 } },
+        y: { position:'right', grid:{ color:'#141920', drawTicks:false },
+             border:{ color:'#1e2530', dash:[3,3] },
+             ticks:{ color:'#5c7080', font:{family:"'DM Mono',monospace",size:10}, callback:v=>fmtK(v), maxTicksLimit:5 } }
       },
-      animation: { duration:500, easing:'easeInOutQuart' },
+      animation: { duration:450, easing:'easeInOutQuart' },
     }
   });
 }
@@ -1740,19 +1877,24 @@ function renderCto(car) {
     return;
   }
 
-  var trueAcq = car.avg_price + cto.total_first_year_extra;
+  var d = ctoDerived(car);
+  var trueAcq = car.avg_price + d.total;
   document.getElementById('ctoBadgeVal').textContent = fmt(trueAcq);
 
   // Import / shipping section
   var importSection = '';
   if (cto.import_duty_pct > 0) {
+    var regRow = cto.registration_est
+      ? '<div class="cto-row"><span class="cto-lbl">Registration</span><span class="cto-val">' + fmt(cto.registration_est) + '</span></div>'
+      : '';
     importSection =
       '<div class="cto-section">' +
         '<div class="cto-sec-hdr">Import Costs</div>' +
         '<div class="cto-row"><span class="cto-lbl">Duty Rate</span><span class="cto-val">' + (cto.import_duty_pct*100).toFixed(1) + '%</span></div>' +
-        '<div class="cto-row"><span class="cto-lbl">Duty Est.</span><span class="cto-val">' + fmt(cto.import_duty_est) + '</span></div>' +
+        '<div class="cto-row"><span class="cto-lbl">Duty Est.</span><span class="cto-val">' + fmt(d.duty) + '</span></div>' +
         '<div class="cto-row"><span class="cto-lbl">Shipping</span><span class="cto-val">' + fmt(cto.shipping_est) + '</span></div>' +
-        '<div class="cto-note">25-yr import exemption (US). Shipped JP → US West Coast.</div>' +
+        regRow +
+        '<div class="cto-note">' + (cto.import_note || '25-yr import exemption (US). Shipped JP → US West Coast.') + '</div>' +
       '</div>';
   } else {
     importSection =
@@ -1780,8 +1922,8 @@ function renderCto(car) {
   var yr1Extra =
     '<div class="cto-section">' +
       '<div class="cto-sec-hdr">Year 1 Extra</div>' +
-      '<div class="cto-row"><span class="cto-lbl">Total Add\'l</span><span class="cto-val">' + fmt(cto.total_first_year_extra) + '</span></div>' +
-      '<div class="cto-note">Duty + shipping + insurance + maintenance</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Total Add\'l</span><span class="cto-val">' + fmt(d.total) + '</span></div>' +
+      '<div class="cto-note">' + (cto.registration_est ? 'Duty + shipping + registration + insurance + maintenance' : 'Duty + shipping + insurance + maintenance') + '</div>' +
     '</div>';
 
   var totalRow =
@@ -1789,7 +1931,7 @@ function renderCto(car) {
       '<div class="cto-total-lbl">TRUE ACQ. COST<br><span style="color:var(--text-dim);font-size:9px;letter-spacing:0;text-transform:none;font-weight:400">Market avg + first-year costs</span></div>' +
       '<div class="cto-total-val">' +
         '<div class="cto-true-price">' + fmt(trueAcq) + '</div>' +
-        '<div class="cto-breakdown">' + fmt(car.avg_price) + ' market + ' + fmt(cto.total_first_year_extra) + ' costs</div>' +
+        '<div class="cto-breakdown">' + fmt(car.avg_price) + ' market + ' + fmt(d.total) + ' costs</div>' +
       '</div>' +
     '</div>';
 
@@ -1807,7 +1949,7 @@ function renderPortfolio() {
 
   // True acquisition cost = sum of (market price + first-year extra) for all cars with cost_to_own
   var trueAcqTotal = WATCHLIST.reduce(function(s,c) {
-    var extra = (c.cost_to_own && c.cost_to_own.total_first_year_extra) ? c.cost_to_own.total_first_year_extra : 0;
+    var extra = c.cost_to_own ? ctoDerived(c).total : 0;
     return s + c.avg_price + extra;
   }, 0);
 
@@ -2059,19 +2201,23 @@ function renderModalCto(car) {
     totalEl.textContent = '—';
     return;
   }
-  var trueAcq = car.avg_price + (cto.total_first_year_extra || 0);
+  var d = ctoDerived(car);
+  var trueAcq = car.avg_price + d.total;
   totalEl.textContent = 'TRUE ACQ ' + fmtK(trueAcq);
 
   var rows = [];
   rows.push('<div class="dm-row"><span class="dm-lbl">Insurance</span><span class="dm-val t">' + fmt(cto.insurance_annual) + '/yr</span></div>');
   rows.push('<div class="dm-row"><span class="dm-lbl">Maintenance</span><span class="dm-val t">' + fmt(cto.maintenance_annual) + '/yr</span></div>');
   if (cto.import_duty_pct > 0) {
-    rows.push('<div class="dm-row"><span class="dm-lbl">Import Duty</span><span class="dm-val">' + fmt(cto.import_duty_est) + ' (' + (cto.import_duty_pct*100).toFixed(1) + '%)</span></div>');
-    rows.push('<div class="dm-row"><span class="dm-lbl">Shipping (JP→US)</span><span class="dm-val">' + fmt(cto.shipping_est) + '</span></div>');
+    rows.push('<div class="dm-row"><span class="dm-lbl">Import Duty</span><span class="dm-val">' + fmt(d.duty) + ' (' + (cto.import_duty_pct*100).toFixed(1) + '%)</span></div>');
+    rows.push('<div class="dm-row"><span class="dm-lbl">Shipping</span><span class="dm-val">' + fmt(cto.shipping_est) + '</span></div>');
+    if (cto.registration_est) {
+      rows.push('<div class="dm-row"><span class="dm-lbl">Registration</span><span class="dm-val">' + fmt(cto.registration_est) + '</span></div>');
+    }
   } else {
     rows.push('<div class="dm-row"><span class="dm-lbl">Import / Ship</span><span class="dm-val na">N/A · US Spec</span></div>');
   }
-  rows.push('<div class="dm-cto-total-row"><span class="dm-lbl">Yr 1 Total</span><span class="dm-val a">' + fmt(cto.total_first_year_extra) + '</span></div>');
+  rows.push('<div class="dm-cto-total-row"><span class="dm-lbl">Yr 1 Total</span><span class="dm-val a">' + fmt(d.total) + '</span></div>');
   body.innerHTML = rows.join('');
 }
 
@@ -2210,11 +2356,14 @@ function copyCarConfig() {
     '      insurance_annual:       ' + (cto.insurance_annual || 0) + ',\n' +
     '      insurance_note:         ' + JSON.stringify(cto.insurance_note || '') + ',\n' +
     '      import_duty_pct:        ' + (cto.import_duty_pct || 0) + ',\n' +
-    '      import_duty_est:        ' + (cto.import_duty_est || 0) + ',\n' +
+    '      import_duty_est:        ' + ctoDerived(car).duty + ',\n' +
     '      shipping_est:           ' + (cto.shipping_est || 0) + ',\n' +
+    (cto.registration_est ? '      registration_est:       ' + cto.registration_est + ',\n' : '') +
+    (cto.registration_note ? '      registration_note:      ' + JSON.stringify(cto.registration_note) + ',\n' : '') +
+    (cto.import_note ? '      import_note:            ' + JSON.stringify(cto.import_note) + ',\n' : '') +
     '      maintenance_annual:     ' + (cto.maintenance_annual || 0) + ',\n' +
     '      maintenance_note:       ' + JSON.stringify(cto.maintenance_note || '') + ',\n' +
-    '      total_first_year_extra: ' + (cto.total_first_year_extra || 0) + ',\n' +
+    '      total_first_year_extra: ' + ctoDerived(car).total + ',\n' +
     '    },\n' +
     '  },';
 
@@ -2242,6 +2391,257 @@ function showToast(msg) {
   }, 4000);
 }
 
+
+// ============================================================
+// CONFIG EDITOR  (in-dashboard editing of cars.config.js)
+// ============================================================
+// Static site: cannot write to its own files. So this editor lets you
+// add/edit/remove cars with LIVE in-session preview, then EXPORT a complete,
+// valid cars.config.js that Code commits to the repo. The committed file is
+// the single source of truth the scraper + dashboard both read on next deploy.
+var CFG_EDIT = { list: [], editingId: null };
+var CFG_CATEGORIES = ['JDM','Modern','Exotic','Muscle','European','Chinese'];
+
+function cfgStripRuntime(c) {
+  var r = {}; Object.keys(c).forEach(function(k){
+    if (k==='delta'||k==='delta_pct'||k==='delta_dir'||k==='_list') return;
+    r[k] = c[k];
+  }); return r;
+}
+
+function cfgBuildWorkingList() {
+  var list = [], seen = {};
+  WATCHLIST.forEach(function(c){ var r=cfgStripRuntime(c); r._list='watchlist'; list.push(r); seen[c.id]=true; });
+  TICKER_UNIVERSE.forEach(function(t){ if(seen[t.id]) return; var r=cfgStripRuntime(t); r._list='ticker'; list.push(r); seen[t.id]=true; });
+  return list;
+}
+
+function openConfigEditor() {
+  CFG_EDIT.list = cfgBuildWorkingList();
+  CFG_EDIT.editingId = null;
+  renderConfigList();
+  document.getElementById('cfgBackdrop').classList.add('open');
+  document.getElementById('cfgModal').classList.add('open');
+}
+function closeConfigEditor() {
+  document.getElementById('cfgBackdrop').classList.remove('open');
+  document.getElementById('cfgModal').classList.remove('open');
+}
+
+function renderConfigList() {
+  var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';});
+  var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';});
+  function row(c) {
+    var sid = (c.id||'').replace(/'/g,"\\'");
+    return '<div class="cfg-row">'
+      + '<span class="cfg-row-sym">'+(c.symbol||'?')+'</span>'
+      + '<span class="cfg-row-name">'+(c.model||'')+'</span>'
+      + '<span class="cfg-row-price">'+fmt(c.avg_price||0)+'</span>'
+      + '<button class="cfg-mini" onclick="editConfigCar(\''+sid+'\')">edit</button>'
+      + '<button class="cfg-mini danger" onclick="deleteConfigCar(\''+sid+'\')">del</button>'
+      + '</div>';
+  }
+  document.getElementById('cfgListBody').innerHTML =
+      '<div class="cfg-sec">WATCHLIST ('+wl.length+')</div>' + wl.map(row).join('')
+    + '<div class="cfg-sec">TICKER UNIVERSE ('+tk.length+')</div>' + tk.map(row).join('');
+  document.getElementById('cfgForm').style.display = 'none';
+  document.getElementById('cfgList').style.display = 'block';
+}
+
+function cfgField(label, id, val, type, opts) {
+  val = (val===undefined||val===null) ? '' : val;
+  if (type==='select') {
+    var o = opts.map(function(x){ return '<option value="'+x+'"'+(x===val?' selected':'')+'>'+x+'</option>'; }).join('');
+    return '<label class="cfg-lbl">'+label+'<select id="'+id+'">'+o+'</select></label>';
+  }
+  return '<label class="cfg-lbl">'+label+'<input id="'+id+'" type="'+(type||'text')+'" value="'+String(val).replace(/"/g,'&quot;')+'"'+(type==='number'?' step="any"':'')+'></label>';
+}
+
+function showCarForm(c) {
+  c = c || {};
+  var cto = c.cost_to_own || {};
+  var colorKeys = Object.keys(CHART_COLORS);
+  var colorKey = cfgHexToKey()[c.color] || colorKeys[0];
+  var h = '<div class="cfg-form-grid">'
+    + cfgField('id (slug)','f_id',c.id,'text')
+    + cfgField('symbol','f_symbol',c.symbol,'text')
+    + cfgField('list','f_list',c._list||'ticker','select',['watchlist','ticker'])
+    + cfgField('make','f_make',c.make,'text')
+    + cfgField('model','f_model',c.model,'text')
+    + cfgField('years','f_years',c.years,'text')
+    + cfgField('category','f_category',c.category||'JDM','select',CFG_CATEGORIES)
+    + cfgField('color','f_color',colorKey,'select',colorKeys)
+    + cfgField('engine','f_engine',c.engine,'text')
+    + cfgField('power','f_power',c.power,'text')
+    + cfgField('avg_price','f_avg',c.avg_price,'number')
+    + cfgField('prev_avg','f_prev',c.prev_avg,'number')
+    + cfgField('low_price','f_low',c.low_price,'number')
+    + cfgField('high_price','f_high',c.high_price,'number')
+    + cfgField('bat_url','f_bat',c.bat_url,'text')
+    + cfgField('market_url','f_market',c.market_url,'text')
+    + '</div>'
+    + '<div class="cfg-note-full">'+cfgField('note','f_note',c.note,'text')+'</div>'
+    + '<div class="cfg-sec">COST TO OWN (duty + total are auto-derived on export)</div>'
+    + '<div class="cfg-form-grid">'
+    + cfgField('insurance_annual','f_ins',cto.insurance_annual,'number')
+    + cfgField('import_duty_pct (e.g. 0.025)','f_duty',cto.import_duty_pct,'number')
+    + cfgField('shipping_est','f_ship',cto.shipping_est,'number')
+    + cfgField('registration_est (optional)','f_reg',cto.registration_est,'number')
+    + cfgField('maintenance_annual','f_maint',cto.maintenance_annual,'number')
+    + '</div>'
+    + '<div class="cfg-note-full">'+cfgField('insurance_note','f_insnote',cto.insurance_note,'text')+'</div>'
+    + '<div class="cfg-note-full">'+cfgField('maintenance_note','f_maintnote',cto.maintenance_note,'text')+'</div>'
+    + '<div class="cfg-note-full">'+cfgField('import_note (optional)','f_impnote',cto.import_note,'text')+'</div>';
+  document.getElementById('cfgFormBody').innerHTML = h;
+  document.getElementById('cfgList').style.display = 'none';
+  document.getElementById('cfgForm').style.display = 'block';
+}
+
+function editConfigCar(id) {
+  CFG_EDIT.editingId = id;
+  showCarForm(CFG_EDIT.list.find(function(c){return c.id===id;}));
+}
+function newConfigCar() { CFG_EDIT.editingId = null; showCarForm({}); }
+
+function gv(id){ var e=document.getElementById(id); return e? e.value.trim() : ''; }
+function gn(id){ var v=gv(id); return v===''? undefined : Number(v); }
+
+function saveConfigCar() {
+  var id = gv('f_id');
+  if (!id) { showToast('id is required'); return; }
+  var cto = {};
+  var ins=gn('f_ins'), duty=gn('f_duty'), ship=gn('f_ship'), reg=gn('f_reg'), maint=gn('f_maint');
+  if (ins!==undefined) cto.insurance_annual = ins;
+  if (gv('f_insnote')) cto.insurance_note = gv('f_insnote');
+  if (duty!==undefined) cto.import_duty_pct = duty;
+  if (ship!==undefined) cto.shipping_est = ship;
+  if (reg!==undefined) cto.registration_est = reg;
+  if (gv('f_impnote')) cto.import_note = gv('f_impnote');
+  if (maint!==undefined) cto.maintenance_annual = maint;
+  if (gv('f_maintnote')) cto.maintenance_note = gv('f_maintnote');
+
+  var car = {
+    id: id, symbol: gv('f_symbol')||id.toUpperCase(), make: gv('f_make'), model: gv('f_model'),
+    years: gv('f_years'), category: gv('f_category'), engine: gv('f_engine'), power: gv('f_power'),
+    avg_price: gn('f_avg')||0, prev_avg: gn('f_prev')||gn('f_avg')||0,
+    low_price: gn('f_low')||0, high_price: gn('f_high')||0,
+    color: CHART_COLORS[gv('f_color')] || CHART_COLORS[Object.keys(CHART_COLORS)[0]],
+    note: gv('f_note'), bat_url: gv('f_bat'), market_url: gv('f_market'),
+    cost_to_own: cto, _list: gv('f_list')||'ticker',
+  };
+  var idx = CFG_EDIT.list.findIndex(function(c){return c.id===(CFG_EDIT.editingId||id);});
+  if (idx>=0) CFG_EDIT.list[idx] = car; else CFG_EDIT.list.push(car);
+  CFG_EDIT.editingId = null;
+  renderConfigList();
+  showToast('Saved "'+car.symbol+'" to working set. Apply or Export to use it.');
+}
+
+function deleteConfigCar(id) {
+  CFG_EDIT.list = CFG_EDIT.list.filter(function(c){return c.id!==id;});
+  renderConfigList();
+}
+
+function applyConfigToSession() {
+  var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';}).map(cfgStripRuntime);
+  var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';}).map(cfgStripRuntime);
+  WATCHLIST = wl.map(function(c){
+    var delta=(c.avg_price||0)-(c.prev_avg||0);
+    var dp = c.prev_avg ? (delta/c.prev_avg)*100 : 0;
+    return Object.assign({},c,{delta:delta,delta_pct:dp,delta_dir:delta>=0?'up':'down'});
+  });
+  TICKER_UNIVERSE = tk;
+  TICKER_DATA = TICKER_UNIVERSE.map(function(t){
+    var delta=(t.avg_price||0)-(t.prev_avg||0);
+    var dp = t.prev_avg ? (delta/t.prev_avg)*100 : 0;
+    return {id:t.id,symbol:t.symbol,name:t.model,price:t.avg_price,change:dp,direction:dp>=0?'up':'down'};
+  });
+  WATCHLIST.forEach(function(c){ ensureHistory(c); });
+  buildTicker(); renderPortfolio(); renderWatchlist(); renderComp();
+  if (!WATCHLIST.find(function(c){return c.id===activeId;})) activeId = (WATCHLIST[0]||{}).id;
+  if (activeId) selectCar(activeId);
+  showToast('Applied to this session (preview). Export + commit to make it permanent.');
+}
+
+// ---- cars.config.js generator ----
+function cfgHexToKey() {
+  var m={}; Object.keys(CHART_COLORS).forEach(function(k){ m[CHART_COLORS[k]]=k; }); return m;
+}
+function jsStr(s){ return "'"+String(s===undefined?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'"; }
+
+function serializeCto(cto, avg) {
+  var duty = Math.round((avg||0)*(cto.import_duty_pct||0));
+  var total = duty + (cto.shipping_est||0)+(cto.registration_est||0)+(cto.insurance_annual||0)+(cto.maintenance_annual||0);
+  var L=['    cost_to_own: {'];
+  if (cto.insurance_annual!==undefined) L.push('      insurance_annual: '+cto.insurance_annual+',');
+  if (cto.insurance_note) L.push('      insurance_note: '+jsStr(cto.insurance_note)+',');
+  if (cto.import_duty_pct!==undefined) L.push('      import_duty_pct: '+cto.import_duty_pct+',');
+  L.push('      import_duty_est: '+duty+',');
+  if (cto.shipping_est!==undefined) L.push('      shipping_est: '+cto.shipping_est+',');
+  if (cto.registration_est!==undefined) L.push('      registration_est: '+cto.registration_est+',');
+  if (cto.import_note) L.push('      import_note: '+jsStr(cto.import_note)+',');
+  if (cto.maintenance_annual!==undefined) L.push('      maintenance_annual: '+cto.maintenance_annual+',');
+  if (cto.maintenance_note) L.push('      maintenance_note: '+jsStr(cto.maintenance_note)+',');
+  L.push('      total_first_year_extra: '+total+',');
+  L.push('    },');
+  return L.join('\n');
+}
+
+function serializeCar(c) {
+  var hk = cfgHexToKey();
+  var colorExpr = hk[c.color] ? 'CHART_COLORS.'+hk[c.color] : jsStr(c.color);
+  var L=['  {'];
+  L.push('    id: '+jsStr(c.id)+',');
+  L.push('    symbol: '+jsStr(c.symbol)+',');
+  if (c.make) L.push('    make: '+jsStr(c.make)+',');
+  if (c.model) L.push('    model: '+jsStr(c.model)+',');
+  if (c.years) L.push('    years: '+jsStr(c.years)+',');
+  if (c.category) L.push('    category: '+jsStr(c.category)+',');
+  if (c.engine) L.push('    engine: '+jsStr(c.engine)+',');
+  if (c.power) L.push('    power: '+jsStr(c.power)+',');
+  L.push('    avg_price: '+(c.avg_price||0)+',');
+  if (c.low_price!==undefined) L.push('    low_price: '+(c.low_price||0)+',');
+  if (c.high_price!==undefined) L.push('    high_price: '+(c.high_price||0)+',');
+  L.push('    prev_avg: '+(c.prev_avg||c.avg_price||0)+',');
+  L.push('    color: '+colorExpr+',');
+  if (c.note) L.push('    note: '+jsStr(c.note)+',');
+  if (c.bat_url) L.push('    bat_url: '+jsStr(c.bat_url)+',');
+  if (c.market_url) L.push('    market_url: '+jsStr(c.market_url)+',');
+  if (c.cost_to_own && Object.keys(c.cost_to_own).length) L.push(serializeCto(c.cost_to_own, c.avg_price));
+  L.push('  },');
+  return L.join('\n');
+}
+
+function serializeConfig() {
+  var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';});
+  var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';});
+  var colorLines = Object.keys(CHART_COLORS).map(function(k){ return '  '+k+": '"+CHART_COLORS[k]+"',"; }).join('\n');
+  var out = '';
+  out += '/* ============================================================\n';
+  out += ' * cars.config.js  -  Garage Terminal single source of truth\n';
+  out += ' * Generated by the in-dashboard Config Editor on '+new Date().toISOString().slice(0,10)+'.\n';
+  out += ' * import_duty_est and total_first_year_extra are auto-derived\n';
+  out += ' * (avg_price * import_duty_pct + flat costs). Edit avg_price, not these.\n';
+  out += ' * ============================================================ */\n\n';
+  out += 'var CHART_COLORS = {\n'+colorLines+'\n};\n\n';
+  out += 'var WATCHLIST = [\n' + wl.map(serializeCar).join('\n') + '\n];\n\n';
+  out += 'var TICKER_UNIVERSE = [\n' + tk.map(serializeCar).join('\n') + '\n];\n';
+  return out;
+}
+
+function exportConfigFile() {
+  var text = serializeConfig();
+  // validate it parses before download
+  try { new Function(text + '; return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE};')(); }
+  catch (e) { showToast('Export error: '+e.message); return; }
+  var blob = new Blob([text], {type:'text/javascript'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'cars.config.js';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Exported cars.config.js - commit it via Code to deploy.');
+}
+
 // ============================================================
 // INIT
 // ============================================================
@@ -2259,5 +2659,34 @@ requestAnimationFrame(function() {
   selectCar('r33-gtr');
 });
 </script>
+<!-- CONFIG EDITOR MODAL -->
+<div id="cfgBackdrop" class="cfg-backdrop" onclick="closeConfigEditor()"></div>
+<div id="cfgModal" class="cfg-modal" role="dialog" aria-label="Config editor">
+  <div class="cfg-head">
+    <div class="cfg-title">CONFIG EDITOR <span class="cfg-sub">// cars.config.js</span></div>
+    <button class="cfg-x" onclick="closeConfigEditor()" aria-label="Close">×</button>
+  </div>
+  <div class="cfg-body">
+    <div id="cfgList">
+      <div class="cfg-toolbar">
+        <button class="cfg-btn primary" onclick="newConfigCar()">+ Add Car</button>
+        <div class="cfg-toolbar-right">
+          <button class="cfg-btn" onclick="applyConfigToSession()">Preview in Session</button>
+          <button class="cfg-btn primary" onclick="exportConfigFile()">Export cars.config.js</button>
+        </div>
+      </div>
+      <div id="cfgListBody"></div>
+      <div class="cfg-hint">Preview applies edits to this browser session only. Export downloads a complete cars.config.js for Code to commit. The committed file is what the scraper and live site read.</div>
+    </div>
+    <div id="cfgForm" style="display:none;">
+      <div id="cfgFormBody"></div>
+      <div class="cfg-form-actions">
+        <button class="cfg-btn" onclick="renderConfigList()">Back</button>
+        <button class="cfg-btn primary" onclick="saveConfigCar()">Save Car</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

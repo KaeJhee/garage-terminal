@@ -6,30 +6,17 @@ name: Weekly Price Update
 # ============================================================
 on:
   schedule:
-    - cron: '0 0 * * 0'   # Sunday 00:00 UTC = Saturday 7pm CDT (summer)
+    - cron: '0 0 * * 0'   # Sunday 00:00 UTC
   workflow_dispatch:        # Manual trigger - useful for testing
 
-# ============================================================
-# PERMISSIONS
-# ============================================================
 permissions:
-  contents: write   # Needed to commit and push data.js + config changes
+  contents: write   # Needed to commit and push data.js + config + price_history
 
 # ============================================================
-# SECRETS REQUIRED (set in GitHub repo -> Settings -> Secrets)
-# ------------------------------------------------------------
-# GH_PAT               - Personal Access Token (Contents: read/write)
-#
-# NETLIFY_HOOK_URL     - Netlify Build Hook URL (optional)
-#                        Netlify -> Site -> Site configuration ->
-#                        Build & deploy -> Build hooks -> Add build hook
-#
-# VERCEL_DEPLOY_HOOK   - Vercel Deploy Hook URL (optional)
-#                        Vercel -> Project -> Settings -> Git ->
-#                        Deploy Hooks -> Create Hook
-#
-# At least one of NETLIFY_HOOK_URL / VERCEL_DEPLOY_HOOK should be set.
-# Both hooks fire if both are configured.
+# SECRETS (repo -> Settings -> Secrets):
+#   GH_PAT             - Personal Access Token (Contents: read/write)
+#   NETLIFY_HOOK_URL   - Netlify Build Hook URL (optional)
+#   VERCEL_DEPLOY_HOOK - Vercel Deploy Hook URL (optional)
 # ============================================================
 
 jobs:
@@ -38,13 +25,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out the repo
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
 
-      # 2. Set up Python (for scrape_prices.py + generate_history.py)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -52,88 +37,59 @@ jobs:
           cache: 'pip'
           cache-dependency-path: scraper/requirements.txt
 
-      # 3. Set up Node.js (used by the scrapers to parse cars.config.js)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 4. Install Python dependencies
       - name: Install dependencies
         run: pip install -r scraper/requirements.txt
 
-      # 5. Run the price scraper - reads cars.config.js automatically
+      # Scrape sold-only median prices (reads cars.config.js automatically)
       - name: Scrape latest prices
         run: python scraper/scrape_prices.py
         env:
-          SCRAPE_DELAY_SEC: '3'   # polite delay between requests
+          SCRAPE_DELAY_SEC: '3'
 
-      # 6. Regenerate data.js + patch cars.config.js
+      # Append real sales to price_history.json, rebuild data.js, patch config
       - name: Regenerate price history
         run: python scraper/generate_history.py
 
-      # 7. Commit and push changes
+      # Commit. IMPORTANT: price_history.json is the persistent sales store and
+      # MUST be committed, or every weekly run starts from an empty history.
+      # scraped_prices.json is gitignored (regenerated each run), so it is not staged.
       - name: Commit updated files
         run: |
           git config user.name  "garage-terminal-bot"
           git config user.email "bot@ghoststrategies.io"
-          git add frontend/data.js frontend/cars.config.js scraper/scraped_prices.json
+          git add frontend/data.js frontend/cars.config.js frontend/price_history.json
           git diff --staged --quiet || git commit -m "chore: weekly price update $(date -u +'%Y-%m-%d')"
 
       - name: Push changes
         run: git push
 
-      # 8. Trigger Netlify redeploy (if configured)
       - name: Trigger Netlify redeploy
         if: success()
         run: |
           if [ -n "${{ secrets.NETLIFY_HOOK_URL }}" ]; then
-            echo "Triggering Netlify build hook..."
-            HTTP_STATUS=$(curl -s -o /tmp/netlify_response.json -w "%{http_code}" \
-              -X POST -H "Content-Type: application/json" \
-              "${{ secrets.NETLIFY_HOOK_URL }}")
-            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
-              echo "Netlify build triggered successfully (HTTP $HTTP_STATUS)"
-            else
-              echo "Warning: Netlify hook returned HTTP $HTTP_STATUS"
-              cat /tmp/netlify_response.json
-            fi
+            curl -s -X POST -H "Content-Type: application/json" "${{ secrets.NETLIFY_HOOK_URL }}" && echo "Netlify triggered"
           else
             echo "NETLIFY_HOOK_URL not set - skipping Netlify."
           fi
 
-      # 9. Trigger Vercel redeploy (if configured)
       - name: Trigger Vercel redeploy
         if: success()
         run: |
           if [ -n "${{ secrets.VERCEL_DEPLOY_HOOK }}" ]; then
-            echo "Triggering Vercel deploy hook..."
-            HTTP_STATUS=$(curl -s -o /tmp/vercel_response.json -w "%{http_code}" \
-              -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}")
-            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
-              echo "Vercel deploy triggered successfully (HTTP $HTTP_STATUS)"
-            else
-              echo "Warning: Vercel hook returned HTTP $HTTP_STATUS"
-              cat /tmp/vercel_response.json
-            fi
+            curl -s -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}" && echo "Vercel triggered"
           else
-            echo "VERCEL_DEPLOY_HOOK not set - skipping Vercel."
-            echo "(Vercel auto-deploys on git push by default, so this is usually optional.)"
+            echo "VERCEL_DEPLOY_HOOK not set - Vercel auto-deploys on push."
           fi
 
-      # 10. Summary
       - name: Print summary
         run: |
           echo "### Price Update Complete" >> $GITHUB_STEP_SUMMARY
           echo "Updated: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
           if [ -f scraper/scraped_prices.json ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Cars updated:**" >> $GITHUB_STEP_SUMMARY
-            python3 -c "
-          import json
-          data = json.load(open('scraper/scraped_prices.json'))
-          print(f\"- Total: {data.get('total_cars', '?')}\")
-          print(f\"- Scraped: {data.get('scraped', '?')}\")
-          print(f\"- Fallback: {data.get('fallback', '?')}\")
-          " >> $GITHUB_STEP_SUMMARY
+            python3 -c "import json;d=json.load(open('scraper/scraped_prices.json'));print(f\"- Total: {d.get('total_cars','?')}  Scraped: {d.get('scraped','?')}  Fallback: {d.get('fallback','?')}\")" >> $GITHUB_STEP_SUMMARY
           fi

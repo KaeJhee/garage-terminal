@@ -152,6 +152,15 @@ def load_cars_from_config() -> list[dict]:
                 "search_term": car["label"],
                 "note":        "auto: bat_url",
             })
+        # Cars & Bids: build a completed-auction search URL from the label.
+        # Modern enthusiast/JDM/exotic coverage; real sold results, scrapeable.
+        cab_q = re.sub(r"\s+", "%20", car["label"].strip())
+        if cab_q:
+            sources.append({
+                "type": "carsandbids",
+                "url":  f"https://carsandbids.com/search/{cab_q}?status=ended",
+                "note": "auto: carsandbids",
+            })
         # Add any per-car extras (KBB, Edmunds, CarGurus, etc.)
         for extra in car.get("extras", []) or []:
             if extra.get("type") and extra.get("url"):
@@ -199,6 +208,10 @@ def extract_prices_from_text(text: str, min_price=5000, max_price=3_000_000) -> 
 # Source-specific scrapers
 # ---------------------------------------------------------------------------
 
+# Per-car volume accumulator. scrape_bat_search writes its real
+# sold-listing count here; scrape_car reads it to set n_sales.
+_SCRAPE_STATS = {"bat_sales": 0, "cab_sales": 0}
+
 def scrape_classic_com(html: str, **_) -> int | None:
     if not html:
         return None
@@ -232,15 +245,17 @@ def scrape_classic_com(html: str, **_) -> int | None:
     return None
 
 
-def scrape_bat_search(html: str, search_term: str = "", **_) -> int | None:
+def scrape_bat_search(html: str, search_term: str = "", **_) -> list:
+    """Return ALL individual sold prices found (list[int]); [] if none.
+    Returning the raw list lets the car aggregator compute a real median
+    and a real sale count instead of a pre-averaged single value."""
     if not html:
-        return None
+        return []
     soup = BeautifulSoup(html, "html.parser")
 
     sold_prices = []
     for tag in soup.find_all(class_=re.compile(r"sold|result|price", re.I)):
-        prices = extract_prices_from_text(tag.get_text())
-        sold_prices.extend(prices)
+        sold_prices.extend(extract_prices_from_text(tag.get_text()))
 
     full_text = soup.get_text()
     for m in re.finditer(r"sold[^$]{0,30}\$([\d,]+)", full_text, re.I):
@@ -251,12 +266,8 @@ def scrape_bat_search(html: str, search_term: str = "", **_) -> int | None:
         except ValueError:
             pass
 
-    if len(sold_prices) >= 3:
-        recent = sold_prices[: max(3, len(sold_prices) // 2)]
-        return int(statistics.mean(recent))
-    if sold_prices:
-        return int(statistics.mean(sold_prices))
-    return None
+    _SCRAPE_STATS["bat_sales"] = len(sold_prices)
+    return sold_prices
 
 
 def scrape_kbb(html: str, **_) -> int | None:
@@ -318,13 +329,48 @@ def scrape_cargurus(html: str, **_) -> int | None:
     return None
 
 
+def scrape_carsandbids(html: str, **_) -> list:
+    """Cars & Bids completed-auction results. Returns ALL individual sold
+    prices (list[int]). C&B marks results with 'Sold for $X'; bids that did
+    not meet reserve show 'Bid to $X' and are excluded (asking, not sold)."""
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    sold = []
+    text = re.sub(r"\s+", " ", soup.get_text())
+    # Only "Sold for $X" - exclude "Bid to $X" (reserve not met)
+    for m in re.finditer(r"sold\s+for\s+\$?([\d,]{4,})", text, re.I):
+        try:
+            val = int(m.group(1).replace(",", ""))
+            if 5000 <= val <= 3_000_000:
+                sold.append(val)
+        except ValueError:
+            pass
+    # structured cards
+    for card in soup.find_all(class_=re.compile(r"auction|result|listing", re.I)):
+        t = card.get_text(" ", strip=True)
+        if re.search(r"sold\s+for", t, re.I):
+            for p in extract_prices_from_text(t):
+                if 5000 <= p <= 3_000_000:
+                    sold.append(p)
+    _SCRAPE_STATS["cab_sales"] = len(sold)
+    return sold
+
+
 SCRAPER_MAP = {
-    "classic_com": scrape_classic_com,
-    "bat_search":  scrape_bat_search,
-    "kbb":         scrape_kbb,
-    "edmunds":     scrape_edmunds,
-    "cargurus":    scrape_cargurus,
+    "classic_com":  scrape_classic_com,
+    "bat_search":   scrape_bat_search,
+    "carsandbids":  scrape_carsandbids,
+    "kbb":          scrape_kbb,
+    "edmunds":      scrape_edmunds,
+    "cargurus":     scrape_cargurus,
 }
+
+# Which source types are REAL SOLD transactions vs ASKING prices.
+# Only SOLD sources feed the market price + sample count. Asking prices
+# (dealer/retail listings) are kept for reference only - they bias high.
+SOLD_SOURCES   = {"classic_com", "bat_search", "carsandbids"}
+ASKING_SOURCES = {"kbb", "edmunds", "cargurus"}
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +381,11 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
     car_id   = car["id"]
     label    = car["label"]
     fallback = car["fallback_avg"]
-    prices_found = []
+    sold_prices   = []   # real individual sold transactions (drive the price)
+    asking_prices = []   # dealer/retail asking (reference only, biased high)
+    venues = []          # which sold venues returned data
+    _SCRAPE_STATS["bat_sales"] = 0
+    _SCRAPE_STATS["cab_sales"] = 0
 
     print(f"\n  [{car_id}] {label}")
     for source in car["sources"]:
@@ -348,32 +398,45 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
             fn = SCRAPER_MAP.get(src_type)
             if fn:
                 kw = {k: v for k, v in source.items() if k not in ("type", "url", "note")}
-                price = fn(html, **kw)
-                if price:
-                    print(f"       OK  found ${price:,}")
-                    prices_found.append(price)
+                result = fn(html, **kw)
+                # normalize: scrapers may return list[int] (sold pools) or int (single)
+                vals = result if isinstance(result, list) else ([result] if result else [])
+                vals = [int(v) for v in vals if v]
+                if vals:
+                    if src_type in SOLD_SOURCES:
+                        sold_prices.extend(vals)
+                        venues.append(src_type)
+                        print(f"       OK  {len(vals)} sold from {src_type} (median ${int(statistics.median(vals)):,})")
+                    else:
+                        asking_prices.extend(vals)
+                        print(f"       ~~  {len(vals)} ASKING from {src_type} (reference only)")
                 else:
                     print(f"       --  no price parsed from {src_type}")
             else:
                 print(f"       --  no scraper for type '{src_type}'")
         time.sleep(DELAY)
 
-    if prices_found:
-        avg = int(statistics.mean(prices_found))
-        print(f"    OK  {car_id}: ${avg:,}  (from {len(prices_found)} source(s))")
+    # Price = MEDIAN of real sold transactions (resists outliers; right-skewed
+    # collector prices make mean misleading). Asking prices never set the price.
+    if sold_prices:
+        avg = int(statistics.median(sold_prices))
         confidence = "scraped"
+        print(f"    OK  {car_id}: median ${avg:,}  (n={len(sold_prices)} sold across {len(set(venues))} venue(s))")
     else:
         avg = fallback
-        print(f"    -- {car_id}: using fallback ${avg:,}")
         confidence = "fallback"
+        print(f"    -- {car_id}: no sold data, fallback ${avg:,}")
 
     return {
-        "id":          car_id,
-        "label":       label,
-        "avg_price":   avg,
-        "confidence":  confidence,
-        "sources_hit": len(prices_found),
-        "scraped_at":  datetime.now(UTC).isoformat() + "Z",
+        "id":           car_id,
+        "label":        label,
+        "avg_price":    avg,                       # median of sold
+        "confidence":   confidence,
+        "n_sales":      len(sold_prices),          # REAL sold count (sample size)
+        "sold_prices":  sold_prices,               # individual sales (for scatter/backfill)
+        "venues":       sorted(set(venues)),
+        "asking_ref":   int(statistics.median(asking_prices)) if asking_prices else None,
+        "scraped_at":   datetime.now(UTC).isoformat() + "Z",
     }
 
 

@@ -1,52 +1,50 @@
 /**
  * ============================================================
- * GARAGE TERMINAL — CAR CONFIGURATION
+ * GARAGE TERMINAL - CAR CONFIGURATION
  * ============================================================
  *
- * HOW TO ADD A NEW CAR TO THE WATCHLIST
- * ---------------------------------------
- * 1. Copy one of the existing car objects below
- * 2. Paste it at the end of the WATCHLIST array
- * 3. Fill in all fields (see FIELD REFERENCE below)
- * 4. Pick a unique color from CHART_COLORS
- * 5. Save the file and refresh the dashboard
+ * SINGLE SOURCE OF TRUTH. The chart, ticker, watchlist, scraper,
+ * and price history all read from this file.
  *
- * The dashboard automatically picks up all cars in WATCHLIST.
- * No other files need to be changed.
+ * EASIEST WAY TO EDIT: the dashboard CONFIG button (gear, top bar).
+ * Add/edit cars, Preview live, Export this file, commit it. The
+ * editor derives the duty fields and writes colors for you.
  *
- * ============================================================
- * TICKER_UNIVERSE — Now uses the SAME schema as WATCHLIST
- * ============================================================
- *
- * Every ticker car has full detail (engine, power, cost_to_own,
- * BaT/Classic.com URLs) so it can be promoted to the watchlist
- * via the dashboard's "Move to Watchlist" button.
+ * BY HAND: copy a car block from WATCHLIST or TICKER_UNIVERSE,
+ * paste at the end of the array, change the fields, commit.
+ * Full guide: HOW_TO_ADD_A_CAR.md
  *
  * ============================================================
  * FIELD REFERENCE
  * ============================================================
  *
  * id          -> Unique slug, lowercase, hyphens only.
- * symbol      -> Ticker label, 6-8 chars, uppercase, no spaces.
- * make        -> Manufacturer name.
- * model       -> Full display name on the chart.
+ * symbol      -> Ticker label, uppercase, no spaces.
+ * make/model  -> Display info. model is the chart header.
  * years       -> Production years, e.g. "1995-1998".
- * category    -> "JDM" | "Modern" | "Exotic" | "Muscle" | "European"
- * engine      -> Engine description.
- * power       -> Power output string.
- * avg_price   -> Current average market price USD (integer).
- * low_price   -> Realistic entry-level price.
- * high_price  -> Top of typical range.
- * prev_avg    -> Previous period's average (for delta calc).
- * color       -> Hex color or CHART_COLORS.<name>.
- * note        -> One-sentence market insight.
- * bat_url     -> Link to active listings.
- * market_url  -> Link to market data.
- * cost_to_own -> Object with first-year ownership costs:
+ * category    -> JDM | Modern | Exotic | Muscle | European | Chinese
+ * engine/power-> Specs strip text.
+ * avg_price   -> Current market price USD (integer). Scraper
+ *                overwrites this weekly for US-market cars.
+ * low/high    -> Range ends for the price gauge.
+ * prev_avg    -> Prior value, drives the delta arrow.
+ * color       -> CHART_COLORS.<name> (see palette below).
+ * note        -> One-line market insight.
+ * bat_url     -> Bring a Trailer search URL (scraped).
+ * market_url  -> classic.com market page (scraped).
+ * cost_to_own -> First-year ownership costs:
  *   insurance_annual, insurance_note,
- *   import_duty_pct, import_duty_est, shipping_est,
+ *   import_duty_pct (0 for US-spec), shipping_est,
  *   maintenance_annual, maintenance_note,
- *   total_first_year_extra
+ *   registration_est (OPTIONAL, imports),
+ *   import_note (OPTIONAL, imports).
+ *
+ * DERIVED, DO NOT SET: import_duty_est and total_first_year_extra
+ * are computed live from avg_price * import_duty_pct + flat costs.
+ *
+ * PRICING: only SOLD sources (BaT, Cars & Bids, classic.com) set
+ * the price, as a MEDIAN. KBB/Edmunds/CarGurus are asking-price
+ * references only. Cars & Bids is added automatically per car.
  *
  * ============================================================
  * CHART COLORS
@@ -99,11 +97,11 @@ var WATCHLIST = [
       insurance_annual:       750,
       insurance_note:         'Hagerty/Grundy specialty classic car policy',
       import_duty_pct:        0.025,
-      import_duty_est:        1935,
+      import_duty_est:        967,
       shipping_est:           4500,
       maintenance_annual:     1200,
       maintenance_note:       'RB26 oil, boost system, intercooler service',
-      total_first_year_extra: 8385,
+      total_first_year_extra: 7417,
     },
   },
 
@@ -129,11 +127,11 @@ var WATCHLIST = [
       insurance_annual:       700,
       insurance_note:         'Hagerty specialty classic; older platform, limited value',
       import_duty_pct:        0.025,
-      import_duty_est:        1335,
+      import_duty_est:        1446,
       shipping_est:           4500,
       maintenance_annual:     1500,
       maintenance_note:       'RB26 service + age-related rubber, seals, hoses',
-      total_first_year_extra: 8035,
+      total_first_year_extra: 8146,
     },
   },
 
@@ -158,11 +156,11 @@ var WATCHLIST = [
       insurance_annual:       800,
       insurance_note:         'Specialty classic policy; Hagerty/Grundy for A80',
       import_duty_pct:        0.025,
-      import_duty_est:        1250,
+      import_duty_est:        1287,
       shipping_est:           4500,
       maintenance_annual:     900,
       maintenance_note:       '2JZ-GTE turbo service; RepairPal est. $561-$810/yr',
-      total_first_year_extra: 7450,
+      total_first_year_extra: 7487,
     },
   },
 
@@ -231,6 +229,115 @@ var WATCHLIST = [
   //  and merged at runtime. To make permanent, paste the snippet
   //  produced by the "Move to Watchlist" copy button here.)
 
+
+  // ============================================================
+  // CHINESE NEV FLAGSHIPS - grey-market import cost modeling
+  // ------------------------------------------------------------
+  // These are NOT US-legal. No FMVSS/EPA certification and they are
+  // brand new, so the 25-yr import exemption does not apply. Realistic
+  // routes are Show-or-Display (NHTSA, ~2,500 mi/yr cap, rarely granted)
+  // or off-road/private use only. Costs modeled as worst-case landed.
+  //
+  // TARIFF: Section 301 levies 100% on Chinese pure-BEVs (HTS 8703.80)
+  // on top of the 2.5% MFN auto duty. Plug-in hybrids and EREVs fall
+  // under different HTS codes that carry the 25% Section 301 rate, not
+  // the 100%, so the PHEV/EREV cars below model ~37.5% effective.
+  // Rates current as of mid-2026; adjust import_duty_pct if policy moves.
+  // avg_price = China market value converted to USD (the car itself).
+  // ============================================================
+  {
+    id:         'nio-es9',
+    symbol:     'NIO-ES9',
+    make:       'Nio',
+    model:      'ES9',
+    years:      '2026-present',
+    category:   'Chinese',
+    engine:     'Dual-motor BEV - 102 kWh - 900V',
+    power:      '697 hp',
+    avg_price:  78000,
+    low_price:  73500,
+    high_price: 94200,
+    prev_avg:   77300,
+    color:      CHART_COLORS.indigo,
+    note:       'Flagship executive SUV, largest BEV in China. Pure-BEV = full 100% Section 301 EV tariff.',
+    bat_url:    'https://bringatrailer.com/search/?s=nio+es9',
+    market_url: 'https://www.classic.com/m/nio/es9/',
+    cost_to_own: {
+      insurance_annual:       3200,
+      insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
+      import_duty_pct:        1.00,
+      import_duty_est:        78000,
+      shipping_est:           5000,
+      registration_est:       4500,
+      registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
+      import_note:            'Pure BEV: 100% Section 301 + 2.5% MFN. Shipped Shanghai -> US West Coast (container).',
+      maintenance_annual:     3500,
+      maintenance_note:       'No US dealer network. Parts air-freighted from China; specialist labor only.',
+      total_first_year_extra: 94200,
+    },
+  },
+  {
+    id:         'zeekr-9x',
+    symbol:     'ZEEKR9X',
+    make:       'Zeekr',
+    model:      '9X',
+    years:      '2025-present',
+    category:   'Chinese',
+    engine:     '2.0T PHEV - 900V - tri-motor',
+    power:      '1,381 hp',
+    avg_price:  75000,
+    low_price:  65400,
+    high_price: 84400,
+    prev_avg:   74100,
+    color:      CHART_COLORS.orange,
+    note:       'Geely super-hybrid flagship, 0-100 in 3.1s. PHEV dodges the 100% BEV tariff (~37.5% effective).',
+    bat_url:    'https://bringatrailer.com/search/?s=zeekr+9x',
+    market_url: 'https://www.classic.com/m/zeekr/9x/',
+    cost_to_own: {
+      insurance_annual:       3000,
+      insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
+      import_duty_pct:        0.375,
+      import_duty_est:        28125,
+      shipping_est:           5000,
+      registration_est:       4500,
+      registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
+      import_note:            'PHEV: 2.5% MFN + 25% Section 301 + ~10% surcharge. Shipped Ningbo -> US West Coast.',
+      maintenance_annual:     3000,
+      maintenance_note:       'No US dealer network. Geely/Zeekr parts import + specialist labor.',
+      total_first_year_extra: 43625,
+    },
+  },
+  {
+    id:         'aito-m9',
+    symbol:     'AITO-M9',
+    make:       'Aito',
+    model:      'M9 (EREV)',
+    years:      '2024-present',
+    category:   'Chinese',
+    engine:     '1.5T EREV - dual-motor 4WD',
+    power:      '489 hp',
+    avg_price:  70000,
+    low_price:  64970,
+    high_price: 82500,
+    prev_avg:   69300,
+    color:      CHART_COLORS.coral,
+    note:       'Huawei/Seres best-seller in China 500K+ yuan segment. EREV modeled; BEV variant would face the 100% tariff.',
+    bat_url:    'https://bringatrailer.com/search/?s=aito+m9',
+    market_url: 'https://www.classic.com/m/aito/m9/',
+    cost_to_own: {
+      insurance_annual:       2800,
+      insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
+      import_duty_pct:        0.375,
+      import_duty_est:        26250,
+      shipping_est:           5000,
+      registration_est:       4500,
+      registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
+      import_note:            'EREV: 2.5% MFN + 25% Section 301 + ~10% surcharge. Shipped Shanghai -> US West Coast.',
+      maintenance_annual:     3200,
+      maintenance_note:       'No US dealer network. Huawei HarmonyOS + Seres parts via import; specialist labor.',
+      total_first_year_extra: 41750,
+    },
+  },
 ];
 
 /**
@@ -361,11 +468,11 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty specialty; 25-yr classic eligible',
       import_duty_pct:        0.025,
-      import_duty_est:        950,
+      import_duty_est:        816,
       shipping_est:           4500,
       maintenance_annual:     1200,
       maintenance_note:       'EJ20 head gaskets, turbo, AWD service intervals',
-      total_first_year_extra: 7350,
+      total_first_year_extra: 7216,
     },
   },
   {
@@ -632,7 +739,7 @@ var TICKER_UNIVERSE = [
     avg_price:  15304,
     low_price:  15000,
     high_price: 70000,
-    prev_avg:   15704,
+    prev_avg:   15304,
     color:      CHART_COLORS.lime,
     note:       'WRC homologation. ST205 is rarest; ST185/ST165 also collected.',
     bat_url:    'https://bringatrailer.com/search/?s=celica+gt-four',
@@ -641,11 +748,11 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty agreed-value rally heritage classic',
       import_duty_pct:        0.025,
-      import_duty_est:        775,
+      import_duty_est:        383,
       shipping_est:           4500,
       maintenance_annual:     1100,
       maintenance_note:       '3S-GTE turbo, AWD service, water-to-air intercooler',
-      total_first_year_extra: 7075,
+      total_first_year_extra: 6683,
     },
   },
   {
@@ -860,7 +967,7 @@ var TICKER_UNIVERSE = [
     avg_price:  95405,
     low_price:  150000,
     high_price: 280000,
-    prev_avg:   105855,
+    prev_avg:   95405,
     color:      CHART_COLORS.pink,
     note:       'Refreshed Vantage with significant power bump. V12 limited build slots.',
     bat_url:    'https://bringatrailer.com/search/?s=aston+vantage+v12',
@@ -916,7 +1023,7 @@ var TICKER_UNIVERSE = [
     avg_price:  123458,
     low_price:  120000,
     high_price: 240000,
-    prev_avg:   124113,
+    prev_avg:   123458,
     color:      CHART_COLORS.lime,
     note:       'Green Hell. Pro variants and Black Series command significant premium.',
     bat_url:    'https://bringatrailer.com/search/?s=amg+gt+r',
@@ -944,7 +1051,7 @@ var TICKER_UNIVERSE = [
     avg_price:  124463,
     low_price:  115000,
     high_price: 200000,
-    prev_avg:   126896,
+    prev_avg:   124463,
     color:      CHART_COLORS.rose,
     note:       'Limited 1,000 US units. RWD-only, weight-stripped. CS variant cheaper alt.',
     bat_url:    'https://bringatrailer.com/search/?s=m4+csl',
