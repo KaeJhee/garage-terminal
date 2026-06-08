@@ -44,7 +44,6 @@ CONFIG_JS_PATH     = ROOT / "frontend" / "cars.config.js"
 
 SYNTHETIC_DAYS = 358
 ROLL_WINDOW    = 90    # trailing days for rolling median + band
-FRESH_DAYS     = 14    # a sale within this many days -> "observed" (fresh)
 STALE_DAYS     = 30    # no real sale in this many days -> stale flag
 WALK_DAYS    = 365
 PLAUSIBLE_LO = 0.25   # drop "sales" below 25% of tracked price
@@ -131,11 +130,6 @@ def record_manual(history, car_id, price, today_iso):
 # ---------------------------------------------------------------------------
 # Build chart objects: rolling median line + band + scatter + meta
 # ---------------------------------------------------------------------------
-
-def _pctl(vals, q):
-    if not vals: return None
-    s=sorted(vals); k=(len(s)-1)*q; f=int(k); c=min(f+1,len(s)-1)
-    return s[f] + (s[c]-s[f])*(k-f)
 
 def build_for_car(entry, today, avg_price):
     if not avg_price or avg_price <= 0:
