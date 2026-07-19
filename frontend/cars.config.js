@@ -964,7 +964,7 @@ var TICKER_UNIVERSE = [
     category:   'European',
     engine:     '4.0L Twin-Turbo V8 (or 5.2L V12)',
     power:      '656 hp',
-    avg_price:  28000,
+    avg_price:  28500,
     low_price:  150000,
     high_price: 280000,
     prev_avg:   28000,
