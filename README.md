@@ -8,8 +8,8 @@ A Bloomberg Terminal-style dashboard for tracking JDM, exotic, and Chinese-NEV c
 
 ## What it does
 
-- **Real-sale price charts.** Each car shows a rolling 90-day median of actual sold prices, a P25 to P75 band, and a scatter of the individual sales behind it. 1M / 3M / 6M / 1Y views (Chart.js).
-- **Honest data labeling.** Every car carries a status badge: LIVE, STALE (no sale in 30+ days), THIN (fewer than 3 sales in 90 days), or MANUAL (no market data), plus its sample size and the date of the last sale.
+- **Price charts with real sale dots.** Each car shows an indicative estimate line anchored to its tracked price, plus a dot for each sold price the weekly scrape found. 1M / 3M / 6M / 1Y views (Chart.js).
+- **Clear data labeling.** Every chart is marked EST because the line is indicative, not observed prices. It also shows how many scraped sale results are plotted, a THIN flag when there are fewer than 3, and the date of the latest one.
 - **Scrolling ticker tape** with all 37 symbols, searchable and filterable.
 - **Watchlist sidebar** with delta indicators and portfolio totals.
 - **Detail modal** with price levels, cost-to-own, sparkline, and direct listing links.
@@ -20,16 +20,18 @@ A Bloomberg Terminal-style dashboard for tracking JDM, exotic, and Chinese-NEV c
 
 ## Watchlist
 
-| Symbol | Car | Category | Avg Price |
-|--------|-----|----------|-----------|
-| R33GTR | Nissan Skyline R33 GT-R (1995-98) | JDM | $77,396 |
-| R32GTR | Nissan Skyline R32 GT-R (1989-94) | JDM | $53,401 |
-| SUPRAA80 | Toyota Supra MK4 A80 (1993-02) | JDM | $51,491 |
-| R35GTR | Nissan GT-R R35 (2020) | Modern | $106,000 |
-| HURASTO | Lamborghini Huracan STO (2022) | Exotic | $427,632 |
-| NIO-ES9 | Nio ES9 | Chinese | $78,000 |
-| ZEEKR9X | Zeekr 9X | Chinese | $75,000 |
-| AITO-M9 | Aito M9 (EREV) | Chinese | $70,000 |
+| Symbol | Car | Category |
+|--------|-----|----------|
+| R33GTR | Nissan Skyline R33 GT-R (1995-98) | JDM |
+| R32GTR | Nissan Skyline R32 GT-R (1989-94) | JDM |
+| SUPRAA80 | Toyota Supra MK4 A80 (1993-02) | JDM |
+| R35GTR | Nissan GT-R R35 (2020) | Modern |
+| HURASTO | Lamborghini Huracan STO (2022) | Exotic |
+| NIO-ES9 | Nio ES9 | Chinese |
+| ZEEKR9X | Zeekr 9X | Chinese |
+| AITO-M9 | Aito M9 (EREV) | Chinese |
+
+Current prices live in `frontend/cars.config.js`, which the weekly job updates.
 
 Plus a 29-car ticker universe spanning JDM, exotic, European, and muscle.
 
@@ -37,13 +39,13 @@ Plus a 29-car ticker universe spanning JDM, exotic, European, and muscle.
 
 ## How the data works
 
-The charts are built from real individual sales, not a simulation.
+Tracked prices come from real sold prices. The chart lines are an estimate drawn around them, and the dots are the scraped sales.
 
-- **Sold-only median.** Bring a Trailer, Cars & Bids, and classic.com are sold sources and set the price. KBB, Edmunds, and CarGurus are asking-price references that show for context but never move the value. The price is the median of sold prices, which resists outliers.
-- **Accumulate plus backfill.** `price_history.json` stores individual real sales with date and venue. The weekly scrape appends new sales. A one-time backfill seeds historical sales from BaT's completed-auction archive.
-- **Rolling median line plus scatter.** `generate_history.py` builds a daily trailing-90-day median line with a P25 to P75 band, and emits the individual sales for the scatter. The line is solid where a recent sale anchors it, dashed where it is interpolated from older sales, and greyed where stale or manual.
-- **No invented history.** A car with no sales yet shows a flat line marked MANUAL. Charts start where real data starts. This flat-until-data state is honest, not broken.
-- **Chinese NEVs are manual.** The Nio, Zeekr, and Aito have no US market to scrape. Their prices come from Chinese sources and are entered with `add_manual_price.py`, then charted as a stepped manual line.
+- **Sold-only median.** Each weekly run takes the median of the sold prices the scraper can reach (Bring a Trailer, plus Cars & Bids and classic.com where reachable) and writes it to the car's tracked price in `cars.config.js`. KBB, Edmunds, and CarGurus are asking-price references that show for context but never move the value. The median resists outliers.
+- **Accumulate plus backfill.** `price_history.json` stores scraped sold prices with a date and venue. Each weekly scrape appends the sold prices it found, dated to the scrape day and de-duplicated only within that week, so the same sale can appear in several weeks. A one-time backfill seeded historical sales from BaT's completed-auction archive.
+- **Estimate line plus sale dots.** `generate_history.py` draws each car's line as a 365-day mean-reverting path that ends at the tracked price. The path is generated deterministically per car, so it stays stable between runs, but it is an illustration, not observed prices. The dots are the scraped sold prices that fall within a plausible range of the tracked price.
+- **What the counts mean.** The sale count on each chart counts scraped results, including repeats across weeks, so it overstates the number of unique sales. The dates on the dots are scrape dates, not auction end dates.
+- **Chinese NEVs are manual.** The Nio, Zeekr, and Aito have no US market to scrape. Their prices come from Chinese sources and are entered with `add_manual_price.py`.
 
 ---
 
@@ -55,15 +57,15 @@ garage-terminal/
 │   ├── index.html         Full dashboard, self-contained, plus the config editor
 │   ├── cars.config.js     Single source of truth: cars, prices, cost-to-own
 │   ├── data.js            Generated charts: BAKED_HISTORY, BAKED_SALES, BAKED_META
-│   └── price_history.json Accumulated real individual sales (the data store)
+│   └── price_history.json Accumulated scraped sold prices (the data store)
 ├── scraper/
 │   ├── scrape_prices.py     Sold-only median from BaT + Cars & Bids + classic.com
 │   ├── backfill_history.py  One-time historical seed from BaT completed auctions
-│   ├── generate_history.py  Builds data.js (rolling median + scatter + status meta)
+│   ├── generate_history.py  Builds data.js (estimate line + sale dots + meta) and updates tracked prices
 │   ├── add_manual_price.py  Logs manual prices for no-market cars (Chinese NEVs)
 │   └── requirements.txt
 ├── backend/
-│   └── main.py            Optional FastAPI server for live/refreshed data
+│   └── main.py            Optional FastAPI demo server (mock data; the dashboard does not use it)
 ├── README.md
 ├── HOW_TO_ADD_A_CAR.md    Adding and updating vehicles
 └── LICENSE
@@ -114,14 +116,15 @@ Always run `backfill_history.py --dry-run` before the real backfill. If it retur
 | Charts | Chart.js 4.x |
 | Fonts | DM Mono, DM Sans (Google Fonts) |
 | Scraper | Python (httpx, BeautifulSoup) |
-| Backend | FastAPI plus Uvicorn (optional) |
+| Backend | Optional FastAPI demo server (not used by the dashboard) |
 | Hosting | Netlify / Vercel (static), GitHub Actions for the weekly cron |
 
 ---
 
 ## Data sources
 
-- [Bring a Trailer](https://bringatrailer.com) and [Cars & Bids](https://carsandbids.com): real completed-auction sold prices (the primary feed).
+- [Bring a Trailer](https://bringatrailer.com): completed-auction sold prices (the primary feed).
+- [Cars & Bids](https://carsandbids.com): completed-auction sold prices where reachable.
 - [classic.com](https://www.classic.com): auction-aggregated sold data where reachable.
 - KBB, Edmunds, CarGurus: asking-price references only, never set the median.
 - Chinese NEVs: [CnEVPost](https://cnevpost.com), [CarNewsChina](https://data.carnewschina.com), and Autohome, entered manually.

@@ -2,12 +2,12 @@
 """
 generate_history.py
 ===================
-Builds the chart data from REAL individual sales accumulated in
-frontend/price_history.json. Produces three objects in frontend/data.js:
+Builds the chart data in frontend/data.js from the tracked price in
+cars.config.js and the scraped sold prices in frontend/price_history.json:
 
-  BAKED_HISTORY[id] = daily line: trailing-90-day MEDIAN of real sales,
-                      with a band (lo/hi = P25/P75) and a "kind" flag
-                      (observed | interpolated | stale | synthetic | manual).
+  BAKED_HISTORY[id] = daily ESTIMATE line: a deterministic 365-day
+                      mean-reverting path that ends at the tracked price
+                      (kind "walk"). Indicative only, not observed prices.
   BAKED_SALES[id]   = individual real sales [{date, price, venue}] for the
                       transaction scatter.
   BAKED_META[id]    = {last_sale, n_sales_90d, median_90d, stale, confidence,

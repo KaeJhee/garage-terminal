@@ -1710,9 +1710,9 @@ function renderMarketStatus(car) {
   if (n > 0) {
     var thin = n < 3;
     items.push('<span class="ms-item">' + (thin ? '<span class="ms-badge thin">THIN</span>' : '') +
-               '<span class="ms-val">' + n + '</span> real BaT sale' + (n===1?'':'s') + ' plotted</span>');
+               '<span class="ms-val">' + n + '</span> BaT sale result' + (n===1?'':'s') + ' plotted</span>');
     if (meta.as_of) {
-      items.push('<span class="ms-item">last sale <span class="ms-val">' + meta.as_of + '</span></span>');
+      items.push('<span class="ms-item">latest scrape <span class="ms-val">' + meta.as_of + '</span></span>');
     }
   } else {
     items.push('<span class="ms-item">no real sales on record</span>');
