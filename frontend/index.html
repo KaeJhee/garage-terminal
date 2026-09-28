@@ -38,6 +38,12 @@
   --teal:         #3cb8c0;
   --purple:       #a06ef0;
 
+  /* Aliases used by the config editor and the ticker search */
+  --panel:        var(--bg-panel);
+  --accent-amber: var(--amber);
+  --accent-red:   var(--red);
+  --text-bright:  #e6e6e6;
+
   --font-mono: 'DM Mono', 'Courier New', monospace;
   --font-body: 'DM Sans', sans-serif;
   --r: 4px;
@@ -1104,7 +1110,7 @@ canvas { display: block; }
   <div class="topbar-right">
     <button class="cfg-btn" onclick="openConfigEditor()" title="Edit cars / config">⚙ CONFIG</button>
     <div class="status-pill"><div class="live-dot"></div>LIVE</div>
-    <div class="status-pill">5 TRACKED</div>
+    <div class="status-pill" id="trackedPill">TRACKED</div>
     <div class="topbar-time" id="clock">--:--:--</div>
   </div>
 </header>
@@ -1143,7 +1149,7 @@ canvas { display: block; }
         <div class="kpi-row"><span class="kpi-label">Exotic Avg</span><span class="kpi-val" id="kpiExotic">—</span></div>
       </div>
     </div>
-    <div class="mkt-bar"><div class="dot"></div>MARKET OPEN · APR 2026</div>
+    <div class="mkt-bar" id="mktBar"><div class="dot"></div>MARKET OPEN</div>
   </aside>
 
   <!-- CENTER -->
@@ -1640,7 +1646,7 @@ function selectCar(id) {
   const range = car.high_price - car.low_price;
   document.getElementById('priceLevels').innerHTML = [
     {l:'High',       v:car.high_price, pct:100, c:'r', fill:'var(--red)'},
-    {l:'Avg Market', v:car.avg_price,  pct:Math.round(((car.avg_price-car.low_price)/range)*100), c:'a', fill:'var(--amber)'},
+    {l:'Avg Market', v:car.avg_price,  pct:Math.min(100,Math.max(0,Math.round(((car.avg_price-car.low_price)/range)*100))), c:'a', fill:'var(--amber)'},
     {l:'Low',        v:car.low_price,  pct:0,   c:'g', fill:'var(--green)'},
   ].map(r=>`<div class="pl-row">
     <span class="pl-lbl">${r.l}</span>
@@ -1891,7 +1897,7 @@ function renderCto(car) {
         '<div class="cto-sec-hdr">Import Costs</div>' +
         '<div class="cto-row"><span class="cto-lbl">Duty Rate</span><span class="cto-val">' + (cto.import_duty_pct*100).toFixed(1) + '%</span></div>' +
         '<div class="cto-row"><span class="cto-lbl">Duty Est.</span><span class="cto-val">' + fmt(d.duty) + '</span></div>' +
-        '<div class="cto-row"><span class="cto-lbl">Shipping</span><span class="cto-val">' + fmt(cto.shipping_est) + '</span></div>' +
+        '<div class="cto-row"><span class="cto-lbl">Shipping</span><span class="cto-val">' + fmt(cto.shipping_est || 0) + '</span></div>' +
         regRow +
         '<div class="cto-note">' + (cto.import_note || '25-yr import exemption (US). Shipped JP → US West Coast.') + '</div>' +
       '</div>';
@@ -1907,15 +1913,15 @@ function renderCto(car) {
   var insuranceSection =
     '<div class="cto-section">' +
       '<div class="cto-sec-hdr">Insurance</div>' +
-      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.insurance_annual) + '/yr</span></div>' +
-      '<div class="cto-note">' + cto.insurance_note + '</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.insurance_annual || 0) + '/yr</span></div>' +
+      '<div class="cto-note">' + (cto.insurance_note || '') + '</div>' +
     '</div>';
 
   var maintenanceSection =
     '<div class="cto-section">' +
       '<div class="cto-sec-hdr">Maintenance</div>' +
-      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.maintenance_annual) + '/yr</span></div>' +
-      '<div class="cto-note">' + cto.maintenance_note + '</div>' +
+      '<div class="cto-row"><span class="cto-lbl">Annual Est.</span><span class="cto-val t">' + fmt(cto.maintenance_annual || 0) + '/yr</span></div>' +
+      '<div class="cto-note">' + (cto.maintenance_note || '') + '</div>' +
     '</div>';
 
   var yr1Extra =
@@ -1963,6 +1969,7 @@ function renderPortfolio() {
   document.getElementById('kpiTotal').textContent   = fmtK(total);
   document.getElementById('kpiTrueAcq').textContent = fmtK(trueAcqTotal);
   document.getElementById('kpiCount').textContent   = WATCHLIST.length;
+  document.getElementById('trackedPill').textContent = WATCHLIST.length + ' TRACKED';
   document.getElementById('kpiGainers').textContent = gainers;
   document.getElementById('kpiLosers').textContent  = losers;
   document.getElementById('kpiJdm').textContent     = jdmAvg    ? fmtK(jdmAvg)    : 'N/A';
@@ -2205,11 +2212,11 @@ function renderModalCto(car) {
   totalEl.textContent = 'TRUE ACQ ' + fmtK(trueAcq);
 
   var rows = [];
-  rows.push('<div class="dm-row"><span class="dm-lbl">Insurance</span><span class="dm-val t">' + fmt(cto.insurance_annual) + '/yr</span></div>');
-  rows.push('<div class="dm-row"><span class="dm-lbl">Maintenance</span><span class="dm-val t">' + fmt(cto.maintenance_annual) + '/yr</span></div>');
+  rows.push('<div class="dm-row"><span class="dm-lbl">Insurance</span><span class="dm-val t">' + fmt(cto.insurance_annual || 0) + '/yr</span></div>');
+  rows.push('<div class="dm-row"><span class="dm-lbl">Maintenance</span><span class="dm-val t">' + fmt(cto.maintenance_annual || 0) + '/yr</span></div>');
   if (cto.import_duty_pct > 0) {
     rows.push('<div class="dm-row"><span class="dm-lbl">Import Duty</span><span class="dm-val">' + fmt(d.duty) + ' (' + (cto.import_duty_pct*100).toFixed(1) + '%)</span></div>');
-    rows.push('<div class="dm-row"><span class="dm-lbl">Shipping</span><span class="dm-val">' + fmt(cto.shipping_est) + '</span></div>');
+    rows.push('<div class="dm-row"><span class="dm-lbl">Shipping</span><span class="dm-val">' + fmt(cto.shipping_est || 0) + '</span></div>');
     if (cto.registration_est) {
       rows.push('<div class="dm-row"><span class="dm-lbl">Registration</span><span class="dm-val">' + fmt(cto.registration_est) + '</span></div>');
     }
@@ -2364,8 +2371,8 @@ function showToast(msg) {
 // ============================================================
 // Static site: cannot write to its own files. So this editor lets you
 // add/edit/remove cars with LIVE in-session preview, then EXPORT a complete,
-// valid cars.config.js that Code commits to the repo. The committed file is
-// the single source of truth the scraper + dashboard both read on next deploy.
+// valid cars.config.js that the owner uploads to frontend/ on GitHub. The upload
+// starts the price update, and the uploaded file is what the scraper and page read.
 var CFG_EDIT = { list: [], editingId: null, renamed: {} };
 var CFG_CATEGORIES = ['JDM','Modern','Exotic','Muscle','European','Chinese'];
 
@@ -2548,7 +2555,7 @@ function applyConfigToSession() {
   buildTicker(); renderPortfolio(); renderWatchlist(); renderComp();
   if (!WATCHLIST.find(function(c){return c.id===activeId;})) activeId = (WATCHLIST[0]||{}).id;
   if (activeId) selectCar(activeId);
-  showToast('Applied to this session (preview). Export + commit to make it permanent.');
+  showToast('Applied to this session (preview). Export and upload cars.config.js to GitHub to make it permanent.');
 }
 
 // ---- cars.config.js generator ----
@@ -2568,12 +2575,24 @@ function exportConfigFile() {
   a.href = url; a.download = 'cars.config.js';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Exported cars.config.js - commit it via Code to deploy.');
+  showToast('Exported cars.config.js. Upload it to GitHub to publish it (link below the car list).');
 }
 
 // ============================================================
 // INIT
 // ============================================================
+// The sidebar's market month is the last day data.js charts
+(function showDataMonth() {
+  if (typeof BAKED_HISTORY === 'undefined') return;
+  var last = '';
+  Object.keys(BAKED_HISTORY).forEach(function(id) {
+    var h = BAKED_HISTORY[id], d = h && h.length && h[h.length - 1].date;
+    if (d && d > last) last = d;
+  });
+  var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  if (last) document.getElementById('mktBar').lastChild.nodeValue = 'MARKET OPEN · ' + months[+last.slice(5, 7) - 1] + ' ' + last.slice(0, 4);
+})();
+
 // Populate BAKED_HISTORY for any user-promoted cars loaded from localStorage.
 // (cars.config.js cars already have history baked in via data.js)
 WATCHLIST.forEach(function(c) { ensureHistory(c); });
@@ -2605,7 +2624,7 @@ requestAnimationFrame(function() {
         </div>
       </div>
       <div id="cfgListBody"></div>
-      <div class="cfg-hint">Preview applies edits to this browser session only. Export downloads a complete cars.config.js for Code to commit. The committed file is what the scraper and live site read.</div>
+      <div class="cfg-hint">Preview applies edits to this browser session only. Export downloads a complete cars.config.js. To publish it, upload that file, still named cars.config.js, at <a href="https://github.com/KaeJhee/garage-terminal/upload/main/frontend" target="_blank" rel="noopener" style="color:var(--amber)">github.com/KaeJhee/garage-terminal/upload/main/frontend</a> and click Commit changes. The site updates itself a few minutes later.</div>
     </div>
     <div id="cfgForm" style="display:none;">
       <div id="cfgFormBody"></div>
