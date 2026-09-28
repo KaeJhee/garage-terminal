@@ -1,5 +1,5 @@
 """
-Dream Garage — Bloomberg Terminal Backend
+Garage Terminal — Bloomberg Terminal Backend
 FastAPI server providing car market price data, simulated price history,
 and a real-time ticker feed for the frontend dashboard.
 """
@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import os
 
-app = FastAPI(title="Dream Garage API", version="1.0.0")
+app = FastAPI(title="Garage Terminal API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -106,7 +106,7 @@ WATCHLIST = [
     },
     {
         "id": "huracan-sto",
-        "symbol": "HURASTО",
+        "symbol": "HURASTO",
         "make": "Lamborghini",
         "model": "Huracán STO (2022)",
         "years": "2022",

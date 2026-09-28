@@ -1706,13 +1706,21 @@ function renderMarketStatus(car) {
   items.push('<span class="ms-badge est">EST</span>');
   items.push('<span class="ms-item">indicative line, anchored to tracked price</span>');
 
-  var n = meta.n_total || 0;
-  if (n > 0) {
+  var total = meta.n_total || 0;
+  // Dots only cover the chart's date range. Older data.js files lack n_plotted, so count it here.
+  var n = meta.n_plotted;
+  if (n == null) {
+    var hist = (typeof BAKED_HISTORY !== 'undefined' && BAKED_HISTORY[car.id]) || [];
+    var sold = (typeof BAKED_SALES !== 'undefined' && BAKED_SALES[car.id]) || [];
+    n = hist.length ? sold.filter(function(s){ return s.date >= hist[0].date && s.date <= hist[hist.length-1].date; }).length : total;
+  }
+  if (total > 0) {
     var thin = n < 3;
     items.push('<span class="ms-item">' + (thin ? '<span class="ms-badge thin">THIN</span>' : '') +
-               '<span class="ms-val">' + n + '</span> BaT sale result' + (n===1?'':'s') + ' plotted</span>');
-    if (meta.as_of) {
-      items.push('<span class="ms-item">latest scrape <span class="ms-val">' + meta.as_of + '</span></span>');
+               '<span class="ms-val">' + n + '</span> sold listing' + (n===1?'':'s') + ' in the last year' +
+               (total > n ? ' (' + total + ' on record)' : '') + '</span>');
+    if (meta.last_sale || meta.as_of) {
+      items.push('<span class="ms-item">last sale <span class="ms-val">' + (meta.last_sale || meta.as_of) + '</span></span>');
     }
   } else {
     items.push('<span class="ms-item">no real sales on record</span>');

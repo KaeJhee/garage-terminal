@@ -37,6 +37,8 @@ Environment variables:
     SCRAPE_DELAY_SEC   - seconds to wait between requests (default: 2)
     SCRAPE_DRY_RUN     - if "1", print results without writing file
     SCRAPE_LIMIT       - if set, only scrape the first N cars (debug)
+    MIN_SALES_FOR_PRICE - qualifying sales needed before a tracked price updates (default: 3)
+    RECENT_DAYS        - how far back a dated sale counts toward the price (default: 730)
 """
 
 import json
@@ -45,7 +47,7 @@ import re
 import statistics
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 UTC = timezone.utc
 from pathlib import Path
@@ -65,6 +67,8 @@ except ImportError:
 DELAY   = float(os.getenv("SCRAPE_DELAY_SEC", "2"))
 DRY_RUN = os.getenv("SCRAPE_DRY_RUN", "0") == "1"
 LIMIT   = int(os.getenv("SCRAPE_LIMIT", "0")) or None
+MIN_SALES_FOR_PRICE = int(os.getenv("MIN_SALES_FOR_PRICE", "3"))
+RECENT_DAYS         = int(os.getenv("RECENT_DAYS", "730"))
 
 ROOT          = Path(__file__).parent.parent
 CONFIG_PATH   = ROOT / "frontend" / "cars.config.js"
@@ -111,6 +115,7 @@ def load_cars_from_config() -> list[dict]:
             bat_url:    c.bat_url || null,
             market_url: c.market_url || null,
             avg_price:  c.avg_price || 0,
+            years:      c.years || null,
             extras:     c.scrape_extras || [],
         }));
         process.stdout.write(JSON.stringify(out));
@@ -150,6 +155,7 @@ def load_cars_from_config() -> list[dict]:
                 "type":        "bat_search",
                 "url":         car["bat_url"],
                 "search_term": car["label"],
+                "years":       car.get("years"),
                 "note":        "auto: bat_url",
             })
         # Cars & Bids: build a completed-auction search URL from the label.
@@ -210,7 +216,7 @@ def extract_prices_from_text(text: str, min_price=5000, max_price=3_000_000) -> 
 
 # Per-car volume accumulator. scrape_bat_search writes its real
 # sold-listing count here; scrape_car reads it to set n_sales.
-_SCRAPE_STATS = {"bat_sales": 0, "cab_sales": 0}
+_SCRAPE_STATS = {"bat_sales": 0, "cab_sales": 0, "bat_rejects": []}
 
 def scrape_classic_com(html: str, **_) -> int | None:
     if not html:
@@ -245,29 +251,82 @@ def scrape_classic_com(html: str, **_) -> int | None:
     return None
 
 
-def scrape_bat_search(html: str, search_term: str = "", **_) -> list:
-    """Return ALL individual sold prices found (list[int]); [] if none.
-    Returning the raw list lets the car aggregator compute a real median
-    and a real sale count instead of a pre-averaged single value."""
+def parse_years(years):
+    """'1995-1998' -> (1995, 1998); '2023-Present' -> (2023, next year), since
+    next year's models go on sale during the current one.
+    A single year like '2022' is a representative model year, not a hard
+    range, so it returns None and no year filter is applied."""
+    if not years:
+        return None
+    m = re.match(r"\s*(\d{4})\s*-\s*(\d{4}|present)\s*$", str(years), re.I)
+    if not m:
+        return None
+    lo = int(m.group(1))
+    hi = date.today().year + 1 if m.group(2).lower() == "present" else int(m.group(2))
+    return (lo, hi)
+
+
+def title_year(title: str):
+    m = re.search(r"\b(19[5-9]\d|20[0-4]\d)\b", title or "")
+    return int(m.group(1)) if m else None
+
+
+def parse_bat_cards(html: str) -> list:
+    """Every listing card on a BaT search page, sold or not:
+    [{listing_id, url, title, sold, price, date}]. Cards carry a
+    data-listing_id, a title link, and a result line such as
+    'Sold for USD $32,000 on 3/25/2024' or 'Bid to USD $61,000 on 4/1/2024'."""
+    soup = BeautifulSoup(html, "html.parser")
+    cards, seen = [], set()
+    for card in soup.select("[data-listing_id]"):
+        lid = card.get("data-listing_id")
+        if not lid or lid in seen:
+            continue
+        seen.add(lid)
+        link = card.select_one("h3 a[href]") or card.select_one('a[href*="/listing/"]')
+        result = card.select_one(".item-results")
+        text = re.sub(r"\s+", " ", result.get_text(" ", strip=True)) if result else ""
+        pm = re.search(r"\$\s*([\d,]+)", text)
+        dm = re.search(r"on\s+(\d{1,2})/(\d{1,2})/(\d{4})", text)
+        day = None
+        if dm:
+            day = date(int(dm.group(3)), int(dm.group(1)), int(dm.group(2))).isoformat()
+        elif card.get("data-timestamp_end", "").isdigit():
+            day = datetime.fromtimestamp(int(card["data-timestamp_end"]), UTC).date().isoformat()
+        cards.append({
+            "listing_id": lid,
+            "url":        link["href"] if link else None,
+            "title":      link.get_text(" ", strip=True) if link else "",
+            "sold":       bool(re.match(r"sold\b", text, re.I)),
+            "price":      int(pm.group(1).replace(",", "")) if pm else None,
+            "date":       day,
+        })
+    return cards
+
+
+def scrape_bat_search(html: str, search_term: str = "", years=None, **_) -> list:
+    """Real BaT sales for this car: one dict per SOLD listing, keyed by its
+    listing ID, dated to the auction end. Unsold auctions ('Bid to') and
+    listings outside the car's model years are skipped."""
     if not html:
         return []
-    soup = BeautifulSoup(html, "html.parser")
-
-    sold_prices = []
-    for tag in soup.find_all(class_=re.compile(r"sold|result|price", re.I)):
-        sold_prices.extend(extract_prices_from_text(tag.get_text()))
-
-    full_text = soup.get_text()
-    for m in re.finditer(r"sold[^$]{0,30}\$([\d,]+)", full_text, re.I):
-        try:
-            val = int(m.group(1).replace(",", ""))
-            if 5000 <= val <= 3_000_000:
-                sold_prices.append(val)
-        except ValueError:
-            pass
-
-    _SCRAPE_STATS["bat_sales"] = len(sold_prices)
-    return sold_prices
+    span = parse_years(years)
+    sales, rejects = [], []
+    for c in parse_bat_cards(html):
+        if not c["price"] or not (5000 <= c["price"] <= 3_000_000):
+            continue
+        y = title_year(c["title"])
+        wrong_year = bool(span and y and not (span[0] <= y <= span[1]))
+        if not c["sold"] or wrong_year:
+            if c["date"]:
+                rejects.append({"price": c["price"], "date": c["date"],
+                                "reason": "unsold" if not c["sold"] else "model year"})
+            continue
+        sales.append({"listing_id": c["listing_id"], "url": c["url"], "title": c["title"],
+                      "price": c["price"], "date": c["date"], "venue": "bat"})
+    _SCRAPE_STATS["bat_sales"] = len(sales)
+    _SCRAPE_STATS["bat_rejects"] = rejects
+    return sales
 
 
 def scrape_kbb(html: str, **_) -> int | None:
@@ -353,6 +412,7 @@ def scrape_carsandbids(html: str, **_) -> list:
             for p in extract_prices_from_text(t):
                 if 5000 <= p <= 3_000_000:
                     sold.append(p)
+    sold = list(dict.fromkeys(sold))   # both passes see the same results; count each price once
     _SCRAPE_STATS["cab_sales"] = len(sold)
     return sold
 
@@ -366,9 +426,11 @@ SCRAPER_MAP = {
     "cargurus":     scrape_cargurus,
 }
 
-# Which source types are REAL SOLD transactions vs ASKING prices.
-# Only SOLD sources feed the market price + sample count. Asking prices
-# (dealer/retail listings) are kept for reference only - they bias high.
+# Which source types report SOLD results vs ASKING prices. Asking prices
+# (dealer/retail listings) are reference only - they bias high. Among sold
+# sources, only dated listings with IDs (Bring a Trailer) set the price and
+# become plotted sales; undated sold figures (Cars & Bids, classic.com's
+# market average) are kept as reference.
 SOLD_SOURCES   = {"classic_com", "bat_search", "carsandbids"}
 ASKING_SOURCES = {"kbb", "edmunds", "cargurus"}
 
@@ -377,15 +439,33 @@ ASKING_SOURCES = {"kbb", "edmunds", "cargurus"}
 # Per-car scraping
 # ---------------------------------------------------------------------------
 
+def decide_price(sales, fallback, today=None):
+    """Price = MEDIAN of recent real sales (resists outliers; right-skewed
+    collector prices make a mean misleading). Only dated sales that ended
+    within RECENT_DAYS count. Fewer than MIN_SALES_FOR_PRICE of them is too
+    thin to move the tracked price, so it stays at the fallback.
+    Returns (price, confidence, recent_sales)."""
+    today = today or date.today()
+    cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
+    recent = [s for s in sales if s.get("date") and s["date"] >= cutoff]
+    if len(recent) >= MIN_SALES_FOR_PRICE:
+        return int(statistics.median(s["price"] for s in recent)), "scraped", recent
+    if sales:
+        return fallback, "thin", recent
+    return fallback, "fallback", recent
+
+
 def scrape_car(client: httpx.Client, car: dict) -> dict:
     car_id   = car["id"]
     label    = car["label"]
     fallback = car["fallback_avg"]
-    sold_prices   = []   # real individual sold transactions (drive the price)
+    sales         = []   # real sold listings: {price, date, venue, listing_id, ...}
+    sold_ref      = []   # sold figures with no listing ID or date (reference only)
     asking_prices = []   # dealer/retail asking (reference only, biased high)
     venues = []          # which sold venues returned data
     _SCRAPE_STATS["bat_sales"] = 0
     _SCRAPE_STATS["cab_sales"] = 0
+    _SCRAPE_STATS["bat_rejects"] = []
 
     print(f"\n  [{car_id}] {label}")
     for source in car["sources"]:
@@ -401,12 +481,19 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
                 result = fn(html, **kw)
                 # normalize: scrapers may return list[int] (sold pools) or int (single)
                 vals = result if isinstance(result, list) else ([result] if result else [])
-                vals = [int(v) for v in vals if v]
+                vals = [v for v in vals if v]
                 if vals:
                     if src_type in SOLD_SOURCES:
-                        sold_prices.extend(vals)
-                        venues.append(src_type)
-                        print(f"       OK  {len(vals)} sold from {src_type} (median ${int(statistics.median(vals)):,})")
+                        found = [v for v in vals if isinstance(v, dict)]
+                        undated = [int(v) for v in vals if not isinstance(v, dict)]
+                        sales.extend(found)
+                        sold_ref.extend(undated)
+                        if found:
+                            venues.append(src_type)
+                            print(f"       OK  {len(found)} sold from {src_type} (median ${int(statistics.median(s['price'] for s in found)):,})")
+                        if undated:
+                            # No listing ID or end date: can't be counted once or dated, so reference only
+                            print(f"       ~~  {len(undated)} undated sold figure(s) from {src_type} (reference only)")
                     else:
                         asking_prices.extend(vals)
                         print(f"       ~~  {len(vals)} ASKING from {src_type} (reference only)")
@@ -416,32 +503,33 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
                 print(f"       --  no scraper for type '{src_type}'")
         time.sleep(DELAY)
 
-    # Price = MEDIAN of real sold transactions (resists outliers; right-skewed
-    # collector prices make mean misleading). Asking prices never set the price.
     if fallback:
         lo_b, hi_b = fallback * 0.25, fallback * 4.0
-        kept = [p for p in sold_prices if lo_b <= p <= hi_b]
-        if len(kept) != len(sold_prices):
-            print(f"       filtered {len(sold_prices)-len(kept)} implausible price(s)")
-        sold_prices = kept
-    if sold_prices:
-        avg = int(statistics.median(sold_prices))
-        confidence = "scraped"
-        print(f"    OK  {car_id}: median ${avg:,}  (n={len(sold_prices)} sold across {len(set(venues))} venue(s))")
+        kept = [s for s in sales if lo_b <= s["price"] <= hi_b]
+        if len(kept) != len(sales):
+            print(f"       filtered {len(sales)-len(kept)} implausible price(s)")
+        sales = kept
+    avg, confidence, recent = decide_price(sales, fallback)
+    if confidence == "scraped":
+        print(f"    OK  {car_id}: median ${avg:,}  (n={len(recent)} recent sold across {len(set(venues))} venue(s))")
+    elif confidence == "thin":
+        print(f"    ~~  {car_id}: only {len(recent)} recent sale(s), keeping ${avg:,} (needs {MIN_SALES_FOR_PRICE})")
     else:
-        avg = fallback
-        confidence = "fallback"
         print(f"    -- {car_id}: no sold data, fallback ${avg:,}")
+    sold_prices = [s["price"] for s in recent]
 
     return {
         "id":           car_id,
         "label":        label,
         "avg_price":    avg,                       # median of sold
         "confidence":   confidence,
-        "n_sales":      len(sold_prices),          # REAL sold count (sample size)
-        "sold_prices":  sold_prices,               # individual sales (for scatter/backfill)
+        "n_sales":      len(sold_prices),          # recent qualifying sales behind the price
+        "sold_prices":  sold_prices,               # their prices (kept for older readers)
+        "sales":        sales,                     # every sold listing found, with id + real date
+        "rejected":     _SCRAPE_STATS["bat_rejects"],  # unsold / wrong-year cards seen, for purging old entries
         "venues":       sorted(set(venues)),
         "asking_ref":   int(statistics.median(asking_prices)) if asking_prices else None,
+        "sold_ref":     int(statistics.median(sold_ref)) if sold_ref else None,
         "scraped_at":   datetime.now(UTC).isoformat() + "Z",
     }
 
@@ -480,11 +568,12 @@ def main():
         "total_cars": len(results),
         "scraped":    sum(1 for r in results if r["confidence"] == "scraped"),
         "fallback":   sum(1 for r in results if r["confidence"] == "fallback"),
+        "thin":       sum(1 for r in results if r["confidence"] == "thin"),
         "prices":     {r["id"]: r for r in results},
     }
 
     print("\n" + "=" * 60)
-    print(f"Summary: {output['scraped']} scraped, {output['fallback']} fallback, "
+    print(f"Summary: {output['scraped']} scraped, {output['thin']} thin, {output['fallback']} fallback, "
           f"{output['total_cars']} total")
     print("=" * 60)
 

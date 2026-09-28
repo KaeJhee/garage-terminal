@@ -42,6 +42,7 @@ MAX_PRICE = 5_000_000
 try:
     import httpx
     from bs4 import BeautifulSoup
+    import scrape_prices          # shares the listing-card parser and model-year rules
     HAVE_DEPS = True
 except ImportError:
     HAVE_DEPS = False
@@ -63,7 +64,7 @@ def load_cars():
         const code=fs.readFileSync(process.argv[1],'utf-8');
         const fn=new Function(code+'; return {WATCHLIST,TICKER_UNIVERSE};');
         const d=fn(); const all=[...d.WATCHLIST,...d.TICKER_UNIVERSE]; const out=[];
-        all.forEach(c=>{ if(c.id) out.push({id:c.id,label:(c.make||'')+' '+(c.model||''),bat_url:c.bat_url||''}); });
+        all.forEach(c=>{ if(c.id) out.push({id:c.id,label:(c.make||'')+' '+(c.model||''),bat_url:c.bat_url||'',years:c.years||null}); });
         process.stdout.write(JSON.stringify(out));
     """
     r = subprocess.run(["node","-e",js,str(CONFIG_JS_PATH)],
@@ -84,7 +85,7 @@ MONTHS = {m: i for i, m in enumerate(
     ["january","february","march","april","may","june","july","august",
      "september","october","november","december"], 1)}
 
-def parse_bat_sold(html: str) -> list:
+def parse_bat_sold(html: str, years=None) -> list:
     """
     Extract real sold listings as [{date: ISO, price: int}] from a BaT
     completed-auction page. Defensive: tries structured listing cards first,
@@ -93,9 +94,23 @@ def parse_bat_sold(html: str) -> list:
     """
     if not html:
         return []
+    # Pages with listing cards: read each card's own result line, keep sold
+    # cards within the car's model years. This never mixes one card's price
+    # with another's date, and never counts a 'Bid to' result.
+    if HAVE_DEPS:
+        cards = scrape_prices.parse_bat_cards(html)
+        if cards:
+            span = scrape_prices.parse_years(years)
+            keep = set()
+            for c in cards:
+                y = scrape_prices.title_year(c["title"])
+                if c["sold"] and c["price"] and c["date"] and MIN_PRICE <= c["price"] <= MAX_PRICE \
+                        and not (span and y and not (span[0] <= y <= span[1])):
+                    keep.add((c["date"], c["price"]))
+            return [{"date": d, "price": p} for d, p in sorted(keep)]
     sales = []
 
-    # Pattern: "sold for $73,000 on 4/12/24" or "Sold for USD $73,000 on April 12, 2024"
+    # No listing cards (older markup): fall back to text patterns. Pattern: "sold for $73,000 on 4/12/24" or "Sold for USD $73,000 on April 12, 2024"
     text = re.sub(r"\s+", " ", html)
 
     # numeric date form: $73,000 on 4/12/24  or  4/12/2024
@@ -121,30 +136,9 @@ def parse_bat_sold(html: str) -> list:
         if price and d:
             sales.append({"date": d, "price": price})
 
-    # Structured cards (BeautifulSoup) - best-effort, markup varies
-    if HAVE_DEPS:
-        try:
-            soup = BeautifulSoup(html, "html.parser")
-            for card in soup.find_all(class_=re.compile(r"listing|result|auction", re.I)):
-                t = card.get_text(" ", strip=True)
-                pm = re.search(r"\$([\d,]{4,})", t)
-                dm = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", t)
-                if pm and dm:
-                    price = _to_int(pm.group(1))
-                    yr = int(dm.group(3)); yr = yr + 2000 if yr < 100 else yr
-                    d = _safe_date(yr, int(dm.group(1)), int(dm.group(2)))
-                    if price and d:
-                        sales.append({"date": d, "price": price})
-        except Exception:
-            pass
-
-    # Dedup by date: AVERAGE multiple sales on the same date (more accurate
-    # than keeping the first), filter price range, sort chronologically.
-    by_date = {}
-    for s in sales:
-        if MIN_PRICE <= s["price"] <= MAX_PRICE:
-            by_date.setdefault(s["date"], []).append(s["price"])
-    return [{"date": d, "price": round(sum(v) / len(v))} for d, v in sorted(by_date.items())]
+    # Keep each distinct sale; averaging same-day sales would invent a price no car sold for
+    keep = {(s["date"], s["price"]) for s in sales if MIN_PRICE <= s["price"] <= MAX_PRICE}
+    return [{"date": d, "price": p} for d, p in sorted(keep)]
 
 def _to_int(s):
     try:
@@ -227,7 +221,7 @@ def run(only_car=None, dry_run=False):
                 continue
             print(f"\n[{c['id']}] {c['label']}\n    GET {c['bat_url'][:70]}")
             html = fetch(client, c["bat_url"])
-            sales = parse_bat_sold(html)
+            sales = parse_bat_sold(html, c.get("years"))
             print(f"    parsed {len(sales)} real sold listings")
             if sales and not dry_run:
                 added = merge_sales(history, c["id"], sales)

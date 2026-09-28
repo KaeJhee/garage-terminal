@@ -79,10 +79,11 @@ The editor recomputes `import_duty_est` and `total_first_year_extra` for you on 
 |-------|--------------|
 | `id` | Unique slug. Used internally and for localStorage. Must match nothing else in the file. |
 | `symbol` | Short ticker label on the tape and watchlist. Uppercase, no spaces. |
-| `make` / `model` / `years` | Display info. `model` is the chart header, `years` is in the specs strip. |
+| `make` / `model` | Display info. `model` is the chart header. |
+| `years` | Shown in the specs strip, and also the scraper's model-year filter. A range such as `1995-1998` or `2023-Present` drops Bring a Trailer listings whose title year falls outside it (Present allows next year's models) and removes matching stored backfill entries, so the range must cover every model year that should count. A single year such as `2022` applies no filter. |
 | `category` | Drives the KPI tiles. Use: `JDM`, `Modern`, `Exotic`, `Muscle`, `European`, `Chinese`. |
 | `engine` / `power` / `note` | Specs strip and market note. Free-form text. |
-| `avg_price` / `low_price` / `high_price` | Drive the price gauge and chart. The scraper overwrites `avg_price` weekly for US-market cars. |
+| `avg_price` / `low_price` / `high_price` | Drive the price gauge and chart. The weekly run updates `avg_price` only when at least 3 sold listings ended in the last two years and their median falls between 80% of `low_price` and 125% of `high_price`. |
 | `prev_avg` | Used for the up/down arrow and percentage. The scraper overwrites it with the prior period's value. |
 | `color` | Chart line color. Pick a name from `CHART_COLORS` at the top of the file. |
 | `bat_url` | Bring a Trailer search URL the scraper hits. Example: `bringatrailer.com/search/?s=mclaren+p1`. |
@@ -104,7 +105,7 @@ You never compute or update those two by hand. When a scraped price changes, the
 
 ## Updating an existing car's price
 
-**US-market cars:** you usually do not need to. The weekly scrape replaces `avg_price` and `prev_avg` with the real sold median. If you want to set a starting value or a manual override, edit `avg_price` (in the editor or by hand) and the duty and total recompute on their own.
+**US-market cars:** you usually do not need to. The weekly scrape replaces `avg_price` and `prev_avg` with the real sold median once there are at least 3 recent qualifying sales and their median is near the car's price band (80% of `low_price` to 125% of `high_price`); until then the value you set stays. If you want to set a starting value or a manual override, edit `avg_price` (in the editor or by hand) and the duty and total recompute on their own.
 
 **Chinese cars, and any car with no US market:** these are different. The Nio, Zeekr, and Aito cannot be sold in the US, so the scraper finds nothing and they stay manual forever. You update their price by hand from Chinese sources (CnEVPost, CarNewsChina, Autohome) using the helper:
 
@@ -144,15 +145,15 @@ Put a car in `WATCHLIST` when you want it always visible with a colored line on 
 
 1. You push to GitHub.
 2. Vercel and Netlify redeploy in about 30 seconds. The car appears on the ticker, and in the watchlist if you put it there.
-3. Until real sales exist, the car shows a flat line marked **MANUAL**. This is the honest "no data yet" state, not a bug.
-4. The Sunday GitHub Actions cron (or a manual run) runs `scrape_prices.py` then `generate_history.py`. It pulls sold prices, stores them in `price_history.json`, rebuilds `data.js` as a rolling-90-day median line plus a scatter of the real sales, and patches `avg_price`, `prev_avg`, and the duty in the config.
+3. Until real sales exist, the chart shows the estimate line and "no real sales on record". This is the honest "no data yet" state, not a bug.
+4. The Sunday GitHub Actions cron (or a manual run) runs `scrape_prices.py` then `generate_history.py`. It pulls sold prices, stores them in `price_history.json`, rebuilds `data.js` as an estimate line plus a dot for each day in the past year with a real sale (the median when several share a day), and patches `avg_price`, `prev_avg`, and the duty when there are enough recent sales.
 5. To seed real historical sales for US-market cars right away, run the backfill once (see below) instead of waiting for the cron.
 
 ### How prices are computed now
 
-- Only **sold** prices set the value. Bring a Trailer, Cars & Bids, and classic.com are sold sources. KBB, Edmunds, and CarGurus are asking-price references and never set the price.
+- Only **sold** Bring a Trailer listings set the value, each counted once by listing ID and dated to the auction end. Cars & Bids and classic.com figures have no listing ID or date, so they are reference only, like the KBB, Edmunds, and CarGurus asking prices.
 - The value is the **median** of sold prices, not the mean, so one outlier sale does not move it.
-- Every car shows its sample size ("N sales, 90d") and a status badge: **LIVE**, **STALE** (no sale in 30+ days), **THIN** (fewer than 3 sales in 90 days), or **MANUAL** (no market data).
+- Every chart is marked **EST** (the line is indicative) and shows how many sold listings fall in the last year, how many are on record, a **THIN** flag when fewer than 3 are plotted, and the date of the last sale.
 
 ---
 

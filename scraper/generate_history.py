@@ -9,7 +9,8 @@ cars.config.js and the scraped sold prices in frontend/price_history.json:
                       mean-reverting path that ends at the tracked price
                       (kind "walk"). Indicative only, not observed prices.
   BAKED_SALES[id]   = individual real sales [{date, price, venue}] for the
-                      transaction scatter.
+                      transaction scatter, each sale stored once (BaT sales by
+                      listing ID, dated to the auction end).
   BAKED_META[id]    = {last_sale, n_sales_90d, median_90d, stale, confidence,
                       as_of} for the staleness + sample-size display.
 
@@ -118,6 +119,79 @@ def add_real_sales(history, car_id, sold_prices, venues, today_iso):
     for p in sold_prices:
         entry["sales"].append({"date": today_iso, "price": round(p,0), "venue": venue_tag})
 
+NON_LISTING_LOOKBACK_DAYS = 120   # sources without listing IDs: same venue + price inside this window = same sale
+
+def add_listing_sales(history, car_id, sales, today_iso):
+    """Record each real sale once. BaT sales carry a listing ID and their
+    auction end date: a listing already stored is skipped, and a backfill
+    entry with the same date and price is upgraded in place rather than
+    duplicated. Sales from sources without IDs are dated to the scrape and
+    skipped if the same venue recorded the same price in the lookback window.
+    Returns the number of new sales added."""
+    entry = history.setdefault(car_id, {"sales": []})
+    stored = entry["sales"]
+    ids = {x["listing_id"] for x in stored if x.get("listing_id")}
+    added = 0
+    cutoff = (d(today_iso) - timedelta(days=NON_LISTING_LOOKBACK_DAYS)).isoformat()
+    for s in sales:
+        price = round(float(s["price"]), 0)
+        lid = s.get("listing_id")
+        if lid:
+            if lid in ids:
+                continue
+            day = s.get("date") or today_iso
+            twin = next((x for x in stored if not x.get("listing_id") and x.get("venue") not in ("manual", "manual-auto")
+                         and x["date"] == day and round(float(x["price"]), 0) == price), None)
+            info = {"listing_id": lid, "url": s.get("url"), "title": s.get("title")}
+            if twin:
+                twin.update(info)
+            else:
+                stored.append({"date": day, "price": price, "venue": s.get("venue", "bat"), **info})
+                added += 1
+            ids.add(lid)
+        else:
+            venue = s.get("venue", "scrape")
+            if any(x.get("venue") == venue and round(float(x["price"]), 0) == price and x["date"] >= cutoff for x in stored):
+                continue
+            stored.append({"date": s.get("date") or today_iso, "price": price, "venue": venue})
+            added += 1
+    return added
+
+def reconcile_days(history, car_id, sales, rejected):
+    """For every day the scraper saw listing cards (sold or rejected), the only
+    real sales that day are the sold listings now stored with IDs. The old
+    archive backfill wrote one blended row per day, mixing in unsold 'Bid to'
+    results, other model years, and page-level duplicates, so any backfill row
+    on a covered day whose price matches none of that day's sold listings is
+    not a sale and is removed. Days the scraper did not see are left alone."""
+    entry = history.get(car_id)
+    if not entry:
+        return 0
+    covered = {s["date"] for s in sales if s.get("date")} | {r["date"] for r in rejected if r.get("date")}
+    if not covered:
+        return 0
+    real = {}
+    for x in entry["sales"]:
+        if x.get("listing_id"):
+            real.setdefault(x["date"], set()).add(round(float(x["price"])))
+    before = len(entry["sales"])
+    entry["sales"] = [x for x in entry["sales"]
+                      if x.get("listing_id") or "backfill" not in x.get("venue", "") or x["date"] not in covered
+                      or round(float(x["price"])) in real.get(x["date"], set())]
+    return before - len(entry["sales"])
+
+def drop_legacy_bat_search(history):
+    """One-time cleanup, safe to re-run. Entries tagged 'bat_search' came from
+    the old page-wide price scrape: re-added every week, dated to the scrape
+    day, and mixed with unsold 'Bid to' results and other model years. The
+    fixed scraper re-collects the sales still listed, with IDs and real dates."""
+    removed = 0
+    for entry in history.values():
+        before = len(entry.get("sales", []))
+        entry["sales"] = [x for x in entry.get("sales", []) if x.get("venue") != "bat_search"]
+        removed += before - len(entry["sales"])
+    return removed
+
 def record_manual(history, car_id, price, today_iso):
     """No sold data: auto-record ONE placeholder for this week (venue
     'manual-auto'). Never touches hand-curated 'manual' points."""
@@ -141,15 +215,16 @@ def build_for_car(entry, today, avg_price):
     line = [{"date": p["date"], "price": p["price"], "lo": p["price"], "hi": p["price"],
              "volume": 0, "kind": "walk"} for p in walk]
     scatter = [{"date": s["date"], "price": round(float(s["price"])), "venue": s["venue"]} for s in clean]
+    n_plotted = sum(1 for s in clean if line[0]["date"] <= s["date"] <= line[-1]["date"])   # the chart's date range
     if clean:
         sd = [d(s["date"]) for s in clean]; sp = [float(s["price"]) for s in clean]
         win90 = [sp[i] for i, x in enumerate(sd) if (today - x).days <= ROLL_WINDOW]
-        meta = {"last_sale": sd[-1].isoformat(), "n_total": len(clean), "n_sales_90d": len(win90),
+        meta = {"last_sale": sd[-1].isoformat(), "n_total": len(clean), "n_plotted": n_plotted, "n_sales_90d": len(win90),
                 "median_90d": round(statistics.median(win90)) if win90 else round(statistics.median(sp)),
                 "stale": (today - sd[-1]).days > STALE_DAYS, "confidence": "estimate+sales",
                 "as_of": sd[-1].isoformat()}
     else:
-        meta = {"last_sale": None, "n_total": 0, "n_sales_90d": 0, "median_90d": avg_price,
+        meta = {"last_sale": None, "n_total": 0, "n_plotted": 0, "n_sales_90d": 0, "median_90d": avg_price,
                 "stale": True, "confidence": "estimate", "as_of": None}
     return line, scatter, meta
 
@@ -205,7 +280,7 @@ def patch_config_prices(config_text, price_data, meta):
     updated=config_text
     for cid,result in price_data.items():
         if result.get("confidence")!="scraped": 
-            print(f"  --  {cid}: skip patch (fallback)"); continue
+            print(f"  --  {cid}: skip patch ({result.get('confidence')})"); continue
         new_avg=int(round(result["price"]))
         idm=re.search(rf"id:\s*['\"]{re.escape(cid)}['\"]", updated)
         if not idm: print(f"  WARN {cid}: id not found"); continue
@@ -214,6 +289,11 @@ def patch_config_prices(config_text, price_data, meta):
         be+=len("\n  },"); block=updated[bs:be]
         oam=re.search(r"avg_price:\s*(\d+)",block)
         if not oam: continue
+        # The car's own configured band is the sanity check: a median far outside it means the
+        # search matched a different model, so keep the current price and say so
+        lo=re.search(r"low_price:\s*(\d+)",block); hi=re.search(r"high_price:\s*(\d+)",block)
+        if lo and hi and not (int(lo.group(1))*0.8 <= new_avg <= int(hi.group(1))*1.25):
+            print(f"  !!  {cid}: median ${new_avg:,} is outside ${int(int(lo.group(1))*0.8):,}-${int(int(hi.group(1))*1.25):,} (80% of low_price to 125% of high_price), not applied"); continue
         old_avg=int(oam.group(1)); m=meta.get(cid,{}); pct=m.get("import_duty_pct",0)
         nd=int(round(new_avg*pct))
         nt=nd+m.get("shipping_est",0)+m.get("registration_est",0)+m.get("insurance_annual",0)+m.get("maintenance_annual",0)
@@ -236,7 +316,7 @@ def load_scrape():
     scraped=json.loads(SCRAPED_PATH.read_text()); out={}
     for cid,r in scraped.get("prices",{}).items():
         out[cid]={"price":r.get("avg_price",0),"confidence":r.get("confidence","scraped"),
-                  "sold_prices":r.get("sold_prices",[]),"venues":r.get("venues",[]),
+                  "sold_prices":r.get("sold_prices",[]),"venues":r.get("venues",[]),"sales":r.get("sales",[]),"rejected":r.get("rejected",[]),
                   "n_sales":r.get("n_sales",0)}
     print(f"Loaded {len(out)} scraped prices")
     return out, True
@@ -266,8 +346,15 @@ def run_generate(dev_mode):
                     for cid,m in meta.items() if m["avg_price"]}
 
     history=load_price_history()
+    dropped=drop_legacy_bat_search(history)
+    if dropped: print(f"Cleanup: removed {dropped} legacy page-scrape entries (re-collected below with listing IDs)")
     for cid,obs in price_data.items():
-        if obs["confidence"]=="scraped" and obs["sold_prices"]:
+        if obs.get("sales") or obs.get("rejected"):
+            n=add_listing_sales(history,cid,obs.get("sales",[]),today_iso)
+            if n: print(f"  +{n} new sale(s) for {cid}")
+            gone=reconcile_days(history,cid,obs.get("sales",[]),obs.get("rejected",[]))
+            if gone: print(f"  -{gone} backfill entr{'y' if gone==1 else 'ies'} for {cid} matched no sold listing on a day the scrape covered")
+        elif obs["confidence"]=="scraped" and obs["sold_prices"]:
             add_real_sales(history,cid,obs["sold_prices"],obs["venues"],today_iso)
         elif obs["price"]:
             # Defer to hand-curated manual points if the user owns this car's history
@@ -288,7 +375,7 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--dev",action="store_true"); ap.add_argument("--watch",action="store_true")
     ap.add_argument("--interval",type=int,default=60); args=ap.parse_args()
-    print("="*60); print("GARAGE TERMINAL - History Accumulator (rolling median + scatter)")
+    print("="*60); print("GARAGE TERMINAL - History Accumulator (estimate line + sale dots)")
     if args.dev: print("Mode: DEV (no real writes)")
     print("="*60)
     run_generate(args.dev)

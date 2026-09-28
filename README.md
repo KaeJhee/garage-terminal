@@ -8,8 +8,8 @@ A Bloomberg Terminal-style dashboard for tracking JDM, exotic, and Chinese-NEV c
 
 ## What it does
 
-- **Price charts with real sale dots.** Each car shows an indicative estimate line anchored to its tracked price, plus a dot for each sold price the weekly scrape found. 1M / 3M / 6M / 1Y views (Chart.js).
-- **Clear data labeling.** Every chart is marked EST because the line is indicative, not observed prices. It also shows how many scraped sale results are plotted, a THIN flag when there are fewer than 3, and the date of the latest one.
+- **Price charts with real sale dots.** Each car shows an indicative estimate line anchored to its tracked price, plus a dot for each day in the past year with a real sale, placed on the auction end date (the median when several sales share a day). 1M / 3M / 6M / 1Y views (Chart.js).
+- **Clear data labeling.** Every chart is marked EST because the line is indicative, not observed prices. It also shows how many sold listings fall in the chart's year and how many are on record, a THIN flag when fewer than 3 are plotted, and the date of the last sale.
 - **Scrolling ticker tape** with all 37 symbols, searchable and filterable.
 - **Watchlist sidebar** with delta indicators and portfolio totals.
 - **Detail modal** with price levels, cost-to-own, sparkline, and direct listing links.
@@ -41,10 +41,10 @@ Plus a 29-car ticker universe spanning JDM, exotic, European, and muscle.
 
 Tracked prices come from real sold prices. The chart lines are an estimate drawn around them, and the dots are the scraped sales.
 
-- **Sold-only median.** Each weekly run takes the median of the sold prices the scraper can reach (Bring a Trailer, plus Cars & Bids and classic.com where reachable) and writes it to the car's tracked price in `cars.config.js`. KBB, Edmunds, and CarGurus are asking-price references that show for context but never move the value. The median resists outliers.
-- **Accumulate plus backfill.** `price_history.json` stores scraped sold prices with a date and venue. Each weekly scrape appends the sold prices it found, dated to the scrape day and de-duplicated only within that week, so the same sale can appear in several weeks. A one-time backfill seeded historical sales from BaT's completed-auction archive.
+- **Sold-only median, with a minimum sample.** Each weekly run takes the median of recent Bring a Trailer sales and writes it to the car's tracked price in `cars.config.js`, but only when at least 3 qualifying sales ended in the last two years and the median falls between 80% of the car's `low_price` and 125% of its `high_price`. Otherwise the tracked price stays where it is and the chart shows how old the last sale is. Cars & Bids and classic.com results carry no listing ID or date, so they are logged for reference only, as are the KBB, Edmunds, and CarGurus asking prices.
+- **Each sale stored once.** The scraper reads Bring a Trailer's listing cards: the listing ID, title, sold price, and auction end date. Unsold auctions ("Bid to") are skipped, and so are listings whose model year falls outside the car's configured `years` range (a range such as `1995-1998` or `2023-Present`, where Present allows next year's models; a single year applies no filter). `price_history.json` keeps each sale once by listing ID, dated to when the auction ended. A one-time backfill seeded historical sales from BaT's completed-auction archive.
 - **Estimate line plus sale dots.** `generate_history.py` draws each car's line as a 365-day mean-reverting path that ends at the tracked price. The path is generated deterministically per car, so it stays stable between runs, but it is an illustration, not observed prices. The dots are the scraped sold prices that fall within a plausible range of the tracked price.
-- **What the counts mean.** The sale count on each chart counts scraped results, including repeats across weeks, so it overstates the number of unique sales. The dates on the dots are scrape dates, not auction end dates.
+- **Coverage.** A search page lists only a handful of results, so thinly traded cars can have few dots and old last-sale dates. That is shown, not hidden.
 - **Chinese NEVs are manual.** The Nio, Zeekr, and Aito have no US market to scrape. Their prices come from Chinese sources and are entered with `add_manual_price.py`.
 
 ---
@@ -57,9 +57,9 @@ garage-terminal/
 │   ├── index.html         Full dashboard, self-contained, plus the config editor
 │   ├── cars.config.js     Single source of truth: cars, prices, cost-to-own
 │   ├── data.js            Generated charts: BAKED_HISTORY, BAKED_SALES, BAKED_META
-│   └── price_history.json Accumulated scraped sold prices (the data store)
+│   └── price_history.json Real sales, each stored once (the data store)
 ├── scraper/
-│   ├── scrape_prices.py     Sold-only median from BaT + Cars & Bids + classic.com
+│   ├── scrape_prices.py     Sold listings from BaT by listing ID; Cars & Bids and classic.com as reference
 │   ├── backfill_history.py  One-time historical seed from BaT completed auctions
 │   ├── generate_history.py  Builds data.js (estimate line + sale dots + meta) and updates tracked prices
 │   ├── add_manual_price.py  Logs manual prices for no-market cars (Chinese NEVs)
@@ -124,8 +124,8 @@ Always run `backfill_history.py --dry-run` before the real backfill. If it retur
 ## Data sources
 
 - [Bring a Trailer](https://bringatrailer.com): completed-auction sold prices (the primary feed).
-- [Cars & Bids](https://carsandbids.com): completed-auction sold prices where reachable.
-- [classic.com](https://www.classic.com): auction-aggregated sold data where reachable.
+- [Cars & Bids](https://carsandbids.com): completed-auction sold prices where reachable, logged for reference (no listing IDs or dates yet).
+- [classic.com](https://www.classic.com): an auction-aggregated market average where reachable, logged for reference.
 - KBB, Edmunds, CarGurus: asking-price references only, never set the median.
 - Chinese NEVs: [CnEVPost](https://cnevpost.com), [CarNewsChina](https://data.carnewschina.com), and Autohome, entered manually.
 - [Hagerty Valuation Tools](https://www.hagerty.com/valuation-tools): the gold-standard condition-adjusted source. Paid (Drivers Club), no free API. The reliable upgrade path if this goes client-facing.
