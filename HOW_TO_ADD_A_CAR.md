@@ -109,24 +109,7 @@ You never compute or update those two by hand. When a scraped price changes, the
 
 **US-market cars:** you usually do not need to. The weekly scrape replaces `avg_price` and `prev_avg` with the real sold median once there are at least 3 recent qualifying sales and their median is near the car's price band (80% of `low_price` to 125% of `high_price`); until then the value you set stays. If you want to set a starting value or a manual override, edit `avg_price` (in the editor or by hand) and the duty and total recompute on their own.
 
-**Chinese cars, and any car with no US market:** these are different. The Nio, Zeekr, and Aito cannot be sold in the US, so the scraper finds nothing and they stay manual forever. You update their price by hand from Chinese sources (CnEVPost, CarNewsChina, Autohome) using the helper:
-
-```
-# add today's price
-python scraper/add_manual_price.py nio-es9 78000
-
-# add a historical point (launch price, or a price cut you found)
-python scraper/add_manual_price.py nio-es9 81000 --date 2026-04-01
-
-# convert straight from RMB (e.g. Zeekr 9X ASP 538,000 RMB at 0.1395)
-python scraper/add_manual_price.py zeekr-9x 538000 --rmb --fx 0.1395 --date 2026-03-01
-
-# list what you have logged, then rebuild the charts
-python scraper/add_manual_price.py nio-es9 --list
-python scraper/generate_history.py
-```
-
-Each entry is a real China-market price on a real date. The chart connects them as a stepped grey manual line so you can see the price changes over time. These hand-entered points are protected: the weekly scrape will not overwrite them. Also update that car's `avg_price` in the config to the latest value, so the KPI tiles and the cost-to-own card match.
+**Chinese cars, and any car with no US market:** these are different. The Nio, Zeekr, and Aito cannot be sold in the US, so the scraper skips cars in the `Chinese` category and they stay manual. Update their `avg_price` by hand (in the editor or the config) from Chinese sources (CnEVPost, CarNewsChina, Autohome); the KPI tiles, the estimate line, and the cost-to-own card all follow it.
 
 ---
 
@@ -149,35 +132,27 @@ Put a car in `WATCHLIST` when you want it always visible with a colored line on 
 2. Vercel and Netlify redeploy in about 30 seconds. The car appears on the ticker, and in the watchlist if you put it there.
 3. Until real sales exist, the chart shows the estimate line and "no real sales on record". This is the honest "no data yet" state, not a bug.
 4. The Sunday GitHub Actions cron (or a manual run) runs `scrape_prices.py` then `generate_history.py`. It pulls sold prices, stores them in `price_history.json`, rebuilds `data.js` as an estimate line plus a dot for each day in the past year with a real sale (the median when several share a day), and patches `avg_price`, `prev_avg`, and the duty when there are enough recent sales.
-5. To seed real historical sales for US-market cars right away, run the backfill once (see below) instead of waiting for the cron.
 
 ### How prices are computed now
 
-- Only **sold** Bring a Trailer listings set the value, each counted once by listing ID and dated to the auction end. Cars & Bids and classic.com figures have no listing ID or date, so they are reference only, like the KBB, Edmunds, and CarGurus asking prices.
+- Only **sold** Bring a Trailer listings set the value, each counted once by listing ID and dated to the auction end. Bring a Trailer is the only source scraped.
 - The value is the **median** of sold prices, not the mean, so one outlier sale does not move it.
 - Every chart is marked **EST** (the line is indicative) and shows how many sold listings fall in the last year, how many are on record, a **THIN** flag when fewer than 3 are plotted, and the date of the last sale.
 
 ---
 
-## Running the backfill and updates (Code does this)
+## Running the weekly update (Code does this)
 
 ```
 cd scraper
 pip install -r requirements.txt
-
-# validate BaT returns data BEFORE the real run (writes nothing)
-python backfill_history.py --dry-run
-
-# if the dry-run shows real per-car counts:
-python backfill_history.py        # seeds real historical sales
-python generate_history.py        # builds the charts from real sales
 
 # the recurring weekly job:
 python scrape_prices.py
 python generate_history.py
 ```
 
-Always run `--dry-run` first. If it returns near-zero, Bring a Trailer is blocking the scraper or its markup shifted; stop rather than commit empty charts.
+If no Bring a Trailer page shows a single sold result, `scrape_prices.py` stops with an error and writes nothing. That means Bring a Trailer is blocking the scraper or its markup shifted; nothing is committed that week.
 
 ---
 
@@ -206,7 +181,7 @@ Regenerate `data.js` without scraping, to preview new cars:
 python3 scraper/generate_history.py --dev
 ```
 
-This builds the chart objects from the current config and `price_history.json` without writing real data or touching the config.
+This rewrites only `data.js`, from the current config and `price_history.json`. The store and the config are not touched.
 
 ---
 
@@ -218,16 +193,15 @@ Delete its block from the array, or click **del** in the dashboard editor and Ex
 
 ## Extra scrape sources (optional)
 
-The scraper hits classic.com (from `market_url`), Bring a Trailer (from `bat_url`), and Cars & Bids (built automatically from the label). To add more, use `scrape_extras`:
+The scraper reads Bring a Trailer from `bat_url` (`market_url` is only the dashboard's Market link). To add more Bring a Trailer searches or model pages for a car, each with its own filters, use `scrape_extras`:
 
 ```js
 scrape_extras: [
-  { type: 'kbb',     url: 'https://www.kbb.com/nissan/gt-r/2020/' },
-  { type: 'edmunds', url: 'https://www.edmunds.com/nissan/gt-r/2020/' },
+  { type: 'bat_search', url: 'https://bringatrailer.com/nissan/gtr-r35/', years: '2017-2024', exclude: ['Wheels'] },
 ],
 ```
 
-Supported types: `kbb`, `edmunds`, `cargurus`. Note these are asking-price references: they appear for context but do not set the median price. Only sold sources do.
+`years`, `include`, and `exclude` work like the car's `years`, `bat_title_include`, and `bat_title_exclude`. Only `bat_search` entries are scraped; entries of any other type are kept in the config but logged as "no scraper" and never fetched.
 
 ---
 

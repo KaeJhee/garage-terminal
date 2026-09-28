@@ -41,11 +41,11 @@ Plus a 29-car ticker universe spanning JDM, exotic, European, and muscle.
 
 Tracked prices come from real sold prices. The chart lines are an estimate drawn around them, and the dots are the scraped sales.
 
-- **Sold-only median, with a minimum sample.** Each weekly run takes the median of recent Bring a Trailer sales and writes it to the car's tracked price in `cars.config.js`, but only when at least 3 qualifying sales ended in the last two years and the median falls between 80% of the car's `low_price` and 125% of its `high_price`. Otherwise the tracked price stays where it is and the chart shows how old the last sale is. Cars & Bids and classic.com results carry no listing ID or date, so they are logged for reference only, as are the KBB, Edmunds, and CarGurus asking prices.
-- **Each sale stored once.** The scraper reads Bring a Trailer's listing cards: the listing ID, title, sold price, and auction end date. Unsold auctions ("Bid to") are skipped, and so are listings whose model year falls outside the car's configured `years` range (a range such as `1995-1998` or `2023-Present`, where Present allows next year's models; a single year applies no filter). Optional `bat_title_include` and `bat_title_exclude` words narrow a search to one trim, and are re-checked every run against stored sales that carry a listing title (untitled backfill rows can't be judged and are kept). `price_history.json` keeps each sale once by listing ID, dated to when the auction ended. A one-time backfill seeded historical sales from BaT's completed-auction archive.
+- **Sold-only median, with a minimum sample.** Each weekly run takes the median of recent Bring a Trailer sales and writes it to the car's tracked price in `cars.config.js`, but only when at least 3 qualifying sales ended in the last two years and the median falls between 80% of the car's `low_price` and 125% of its `high_price`. Otherwise the tracked price stays where it is and the chart shows how old the last sale is. Bring a Trailer is the only source scraped.
+- **Each sale stored once.** The scraper reads Bring a Trailer's listing cards: the listing ID, title, sold price, and auction end date. When BaT redirects a search to a model page (for example `/mclaren/720s/`), it reads the page's embedded list of recent completed auctions instead, with the same rules. Unsold auctions ("Bid to") are skipped, and so are listings whose model year falls outside the car's configured `years` range (a range such as `1995-1998` or `2023-Present`, where Present allows next year's models; a single year applies no filter). Optional `bat_title_include` and `bat_title_exclude` words narrow a search to one trim, and are re-checked every run against stored sales that carry a listing title (untitled backfill rows can't be judged and are kept). `price_history.json` keeps each sale once by listing ID, dated to when the auction ended. A one-time backfill seeded historical sales from BaT's completed-auction archive.
 - **Estimate line plus sale dots.** `generate_history.py` draws each car's line as a 365-day mean-reverting path that ends at the tracked price. The path is generated deterministically per car, so it stays stable between runs, but it is an illustration, not observed prices. The dots are the scraped sold prices that fall within a plausible range of the tracked price.
 - **Coverage.** A search page lists only a handful of results, so thinly traded cars can have few dots and old last-sale dates. That is shown, not hidden.
-- **Chinese NEVs are manual.** The Nio, Zeekr, and Aito have no US market to scrape. Their prices come from Chinese sources and are entered with `add_manual_price.py`.
+- **Chinese NEVs are manual.** The Nio, Zeekr, and Aito have no US market to scrape. Their prices come from Chinese sources and are set by hand as `avg_price` in `cars.config.js`; the scraper skips the `Chinese` category.
 
 ---
 
@@ -59,13 +59,9 @@ garage-terminal/
 │   ├── data.js            Generated charts: BAKED_HISTORY, BAKED_SALES, BAKED_META
 │   └── price_history.json Real sales, each stored once (the data store)
 ├── scraper/
-│   ├── scrape_prices.py     Sold listings from BaT by listing ID; Cars & Bids and classic.com as reference
-│   ├── backfill_history.py  One-time historical seed from BaT completed auctions
+│   ├── scrape_prices.py     Sold listings from Bring a Trailer, each by listing ID
 │   ├── generate_history.py  Builds data.js (estimate line + sale dots + meta) and updates tracked prices
-│   ├── add_manual_price.py  Logs manual prices for no-market cars (Chinese NEVs)
 │   └── requirements.txt
-├── backend/
-│   └── main.py            Optional FastAPI demo server (mock data; the dashboard does not use it)
 ├── README.md
 ├── HOW_TO_ADD_A_CAR.md    Adding and updating vehicles
 └── LICENSE
@@ -90,21 +86,15 @@ Two ways, both end in committing `cars.config.js`:
 cd scraper
 pip install -r requirements.txt
 
-# seed real history (run once; US-market cars only)
-python backfill_history.py --dry-run     # validate BaT returns data; writes nothing
-python backfill_history.py               # then the real seed
-python generate_history.py               # build the charts
-
 # weekly update (the recurring job, also run by GitHub Actions)
 python scrape_prices.py
 python generate_history.py
 
-# log a Chinese-car price change
-python add_manual_price.py nio-es9 78000 --date 2026-06-15
-python generate_history.py
+# rebuild data.js only (no scrape; the store and config are not touched)
+python generate_history.py --dev
 ```
 
-Always run `backfill_history.py --dry-run` before the real backfill. If it returns near-zero, BaT is blocking the scraper or its markup changed; stop rather than commit empty charts.
+If no Bring a Trailer page shows a single sold result, `scrape_prices.py` stops with an error and writes nothing, so a blocked scraper or a markup change fails the run instead of committing an empty week.
 
 ---
 
@@ -116,7 +106,6 @@ Always run `backfill_history.py --dry-run` before the real backfill. If it retur
 | Charts | Chart.js 4.x |
 | Fonts | DM Mono, DM Sans (Google Fonts) |
 | Scraper | Python (httpx, BeautifulSoup) |
-| Backend | Optional FastAPI demo server (not used by the dashboard) |
 | Hosting | Netlify / Vercel (static), GitHub Actions for the weekly cron |
 
 ---
@@ -124,9 +113,6 @@ Always run `backfill_history.py --dry-run` before the real backfill. If it retur
 ## Data sources
 
 - [Bring a Trailer](https://bringatrailer.com): completed-auction sold prices (the primary feed).
-- [Cars & Bids](https://carsandbids.com): completed-auction sold prices where reachable, logged for reference (no listing IDs or dates yet).
-- [classic.com](https://www.classic.com): an auction-aggregated market average where reachable, logged for reference.
-- KBB, Edmunds, CarGurus: asking-price references only, never set the median.
 - Chinese NEVs: [CnEVPost](https://cnevpost.com), [CarNewsChina](https://data.carnewschina.com), and Autohome, entered manually.
 - [Hagerty Valuation Tools](https://www.hagerty.com/valuation-tools): the gold-standard condition-adjusted source. Paid (Drivers Club), no free API. The reliable upgrade path if this goes client-facing.
 
