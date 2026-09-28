@@ -31,7 +31,7 @@
  * color       -> CHART_COLORS.<name> (see palette below).
  * note        -> One-line market insight.
  * bat_url     -> Bring a Trailer search URL (scraped).
- * market_url  -> classic.com market page (scraped).
+ * market_url  -> Market link on the dashboard (not scraped).
  * cost_to_own -> First-year ownership costs:
  *   insurance_annual, insurance_note,
  *   import_duty_pct (0 for US-spec), shipping_est,
@@ -42,9 +42,8 @@
  * DERIVED, DO NOT SET: import_duty_est and total_first_year_extra
  * are computed live from avg_price * import_duty_pct + flat costs.
  *
- * PRICING: only SOLD sources (BaT, Cars & Bids, classic.com) set
- * the price, as a MEDIAN. KBB/Edmunds/CarGurus are asking-price
- * references only. Cars & Bids is added automatically per car.
+ * PRICING: only SOLD Bring a Trailer listings set the price, as the
+ * MEDIAN of the last two years, once there are 3 or more sales.
  *
  * ============================================================
  * CHART COLORS
@@ -145,8 +144,8 @@ var WATCHLIST = [
     engine:     '2JZ-GTE Twin-Turbo I6',
     power:      '320 hp (factory)',
     avg_price:  81500,
-    low_price:  30000,
-    high_price: 80000,
+    low_price:  50000,
+    high_price: 150000,
     prev_avg:   81500,
     color:      CHART_COLORS.green,
     note:       '2JZ legendary for 1000+ hp builds. Turbo coupes most sought.',
@@ -182,6 +181,9 @@ var WATCHLIST = [
     note:       'KBB Fair Purchase $106K (Premium). NISMO at $212K original MSRP.',
     bat_url:    'https://www.cars.com/shopping/nissan-gt_r-2020/',
     market_url: 'https://www.kbb.com/nissan/gt-r/2020/',
+    scrape_extras: [
+      { type: 'bat_search', url: 'https://bringatrailer.com/search/?s=nissan+gt-r', years: '2017-2020' },
+    ],
     cost_to_own: {
       insurance_annual:       4200,
       insurance_note:         'TheZebra/CarEdge full coverage; supercar premium rate',
@@ -205,7 +207,7 @@ var WATCHLIST = [
     engine:     'NA V10',
     power:      '631 hp',
     avg_price:  355000,
-    low_price:  384995,
+    low_price:  280000,
     high_price: 580000,
     prev_avg:   357500,
     color:      CHART_COLORS.purple,
@@ -378,7 +380,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   93046,
     color:      CHART_COLORS.orange,
     note:       'Senna-developed chassis. NA2 (3.2L) and Type R command premium.',
-    bat_url:    'https://bringatrailer.com/search/?s=honda+nsx+na1',
+    bat_url:    'https://bringatrailer.com/search/?s=acura+nsx',
     market_url: 'https://www.classic.com/m/honda/nsx/',
     cost_to_own: {
       insurance_annual:       800,
@@ -491,7 +493,8 @@ var TICKER_UNIVERSE = [
     prev_avg:   33429,
     color:      CHART_COLORS.rose,
     note:       'Spec R = 6-spd + helical LSD. Aero kit and Autech variants premium.',
-    bat_url:    'https://bringatrailer.com/search/?s=nissan+silvia+s15',
+    bat_url:    'https://bringatrailer.com/search/?s=nissan+silvia',
+    bat_title_include: ['Spec R', 'Spec-R'],
     market_url: 'https://www.classic.com/m/nissan/silvia/s15/',
     cost_to_own: {
       insurance_annual:       700,
@@ -519,7 +522,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   175856,
     color:      CHART_COLORS.sky,
     note:       'Hand-blueprinted engine, carbon roof, no AC. Pinnacle of NA1/NA2.',
-    bat_url:    'https://bringatrailer.com/search/?s=nsx+type+r',
+    bat_url:    'https://bringatrailer.com/search/?s=nsx-r',
     market_url: 'https://www.classic.com/m/honda/nsx/type-r/',
     cost_to_own: {
       insurance_annual:       1500,
@@ -688,7 +691,8 @@ var TICKER_UNIVERSE = [
     prev_avg:   24121,
     color:      CHART_COLORS.pink,
     note:       'US-spec turbo from 91-95. Rev3+ chassis fixed snap-oversteer issue.',
-    bat_url:    'https://bringatrailer.com/search/?s=mr2+sw20+turbo',
+    bat_url:    'https://bringatrailer.com/search/?s=mr2+turbo',
+    bat_title_include: ['Turbo'],
     market_url: 'https://www.classic.com/m/toyota/mr2/sw20/',
     cost_to_own: {
       insurance_annual:       650,
@@ -716,7 +720,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   18701,
     color:      CHART_COLORS.cyan,
     note:       'US-spec KA24 base. Clean unmodified examples appreciating fast.',
-    bat_url:    'https://bringatrailer.com/search/?s=240sx+s13',
+    bat_url:    'https://bringatrailer.com/search/?s=nissan+240sx',
     market_url: 'https://www.classic.com/m/nissan/240sx/s13/',
     cost_to_own: {
       insurance_annual:       600,
@@ -833,7 +837,8 @@ var TICKER_UNIVERSE = [
     prev_avg:   211907,
     color:      CHART_COLORS.gold,
     note:       'Last NA RS before turbo era 992. Weissach pkg + magnesium wheels rare.',
-    bat_url:    'https://bringatrailer.com/search/?s=gt3+rs+991',
+    bat_url:    'https://bringatrailer.com/search/?s=911+gt3+rs',
+    bat_title_include: ['GT3 RS'],
     market_url: 'https://www.classic.com/m/porsche/911/991/gt3-rs/',
     cost_to_own: {
       insurance_annual:       5500,
@@ -965,17 +970,17 @@ var TICKER_UNIVERSE = [
     symbol:     'V12-VANTAGE',
     make:       'Aston Martin',
     model:      'V12 Vantage',
-    years:      '2022-2023',
+    years:      '2010-2023',
     category:   'European',
-    engine:     '5.2L Twin-Turbo V12',
-    power:      '690 hp',
+    engine:     '5.9L V12 (5.2L Twin-Turbo V12 in 2023)',
+    power:      '510-690 hp',
     avg_price:  195000,
-    low_price:  150000,
-    high_price: 280000,
+    low_price:  80000,
+    high_price: 400000,
     prev_avg:   195000,
     color:      CHART_COLORS.pink,
-    note:       'Last V12 Vantage: a limited 2023 run of coupes and roadsters. Sales of both count.',
-    bat_url:    'https://bringatrailer.com/search/?s=aston+vantage+v12',
+    note:       'Road-going V12 Vantage: 2010-13 original, 2014-18 V12 Vantage S, 2023 final run. All count.',
+    bat_url:    'https://bringatrailer.com/search/?s=v12+vantage',
     market_url: 'https://www.classic.com/m/aston-martin/vantage/',
     cost_to_own: {
       insurance_annual:       5000,
@@ -984,7 +989,7 @@ var TICKER_UNIVERSE = [
       import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     3500,
-      maintenance_note:       'Aston dealer service for the 5.2L twin-turbo V12.',
+      maintenance_note:       'Aston dealer or V12 specialist service; clutch and coil packs on older cars.',
       total_first_year_extra: 8500,
     },
   },
@@ -1054,7 +1059,7 @@ var TICKER_UNIVERSE = [
     engine:     '3.0L Twin-Turbo I6',
     power:      '543 hp',
     avg_price:  105000,
-    low_price:  115000,
+    low_price:  90000,
     high_price: 200000,
     prev_avg:   134715,
     color:      CHART_COLORS.rose,
@@ -1175,7 +1180,7 @@ var TICKER_UNIVERSE = [
     prev_avg:   135000,
     color:      CHART_COLORS.coral,
     note:       'Z07 pkg adds carbon wheels and aero. Dealer markups have cooled in 2026.',
-    bat_url:    'https://bringatrailer.com/search/?s=c8+z06',
+    bat_url:    'https://bringatrailer.com/search/?s=corvette+z06',
     market_url: 'https://www.classic.com/m/chevrolet/corvette/c8-z06/',
     cost_to_own: {
       insurance_annual:       3500,

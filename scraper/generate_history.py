@@ -167,8 +167,7 @@ def enforce_car_rules(history, car_id, rules):
         return 0
     span = sp.parse_years(rules.get("years"))
     inc, exc = rules.get("title_include"), rules.get("title_exclude")
-    if not (span or inc or exc):
-        return 0
+    # Even with no rules set, a stored title without a model year is a parts listing, not a car
     before = len(entry["sales"])
     entry["sales"] = [x for x in entry["sales"]
                       if not (x.get("listing_id") and x.get("title")

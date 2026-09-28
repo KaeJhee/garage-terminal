@@ -318,7 +318,10 @@ def card_verdict(card, span, include=None, exclude=None):
     if not card["sold"]:
         return "unsold"
     y = title_year(card["title"])
-    if span and y and not (span[0] <= y <= span[1]):
+    # Every car listing's title starts with its model year; wheels, engines and other parts have none
+    if y is None:
+        return "model year"
+    if span and not (span[0] <= y <= span[1]):
         return "model year"
     t = (card["title"] or "").lower()
     if include and not any(k.lower() in t for k in include):
@@ -393,7 +396,7 @@ def decide_price(sales, fallback, today=None):
     return fallback, "fallback", recent
 
 
-def scrape_car(client: httpx.Client, car: dict) -> dict:
+def scrape_car(client: httpx.Client, car: dict, today=None) -> dict:
     car_id   = car["id"]
     label    = car["label"]
     fallback = car["fallback_avg"]
@@ -449,7 +452,7 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
                 print("       --  no sold listings counted")
         time.sleep(DELAY)
 
-    avg, confidence, recent = decide_price(sales, fallback)
+    avg, confidence, recent = decide_price(sales, fallback, today)
     if confidence == "scraped":
         print(f"    OK  {car_id}: median ${avg:,}  (n={len(recent)} recent sold)")
     elif confidence == "thin":

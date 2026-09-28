@@ -294,7 +294,7 @@ def test_model_page_redirect_and_404_are_recorded():
         {"type": "bat_search", "url": empty, "years": "2023-Present"},
         {"type": "bat_search", "url": search, "years": "2023-Present"}]}      # a repeated search counts nothing twice
     with fake_bat({search: (200, model, page), empty: (404, empty, None)}):
-        r = sp.scrape_car(None, car)
+        r = sp.scrape_car(None, car, today=date(2026, 9, 28))              # pinned: sales age out of the 2-year window
     assert (r["confidence"], r["avg_price"]) == ("scraped", 256911)          # median of the four 2023 cars
     first, missing, again = r["sources"]
     assert (first["status"], first["final_url"], first["kind"], first["counted"]) == (200, model, "model", 4)
@@ -525,6 +525,21 @@ def test_interrupted_store_write_keeps_the_old_file():
         finally:
             gh.PRICE_HISTORY_PATH, gh.os.replace = saved_path, saved_replace
         assert len(json.loads(path.read_text())["car"]["sales"]) == 700          # still the whole old store
+
+
+def test_parts_listings_are_not_sales():
+    page = "".join([
+        card(401, "2024 Chevrolet Corvette Z06 Coupe 3LZ", "Sold for USD $110,500 <span>on 9/6/2026</span>"),
+        card(402, "20×10″ and 21×13″ Carbon-Fiber Wheels for C8 Corvette Z06", "Sold for USD $11,000 <span>on 9/10/2026</span>"),
+        card(403, "Honda NSX-R Wheels & Suspension Components", "Sold for USD $12,500 <span>on 4/4/2026</span>"),
+    ])
+    assert [x["listing_id"] for x in sp.scrape_bat_search(page, years="2023-Present")] == ["401"]
+    assert [x["listing_id"] for x in sp.scrape_bat_search(page, years=None)] == ["401"]     # no year rule needed
+    h = {"z": {"sales": [{"date": "2026-09-10", "price": 11000, "venue": "bat", "listing_id": "402", "title": "20x10 Wheels for C8 Corvette Z06"},
+                         {"date": "2026-09-06", "price": 110500, "venue": "bat", "listing_id": "401", "title": "2024 Chevrolet Corvette Z06"},
+                         {"date": "2024-01-01", "price": 90000, "venue": "bat-backfill"}]}}
+    assert gh.enforce_car_rules(h, "z", {"years": "2022"}) == 1                          # stored parts sale removed, untitled row kept
+    assert sorted(x.get("listing_id", "-") for x in h["z"]["sales"]) == ["-", "401"]
 
 
 def test_title_filters():

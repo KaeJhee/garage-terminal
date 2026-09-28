@@ -50,8 +50,10 @@ for (const c of cars) {
   }
   if (c.low_price > 0 && c.high_price > 0 && c.low_price >= c.high_price) errors.push(name + ': low_price must be below high_price');
 
-  if (c.bat_url && !/^https:\/\/bringatrailer\.com\/search\//.test(c.bat_url)) {
-    warnings.push(name + ': bat_url is not a Bring a Trailer search, so this car is not scraped');
+  const isBat = u => /^https:\/\/(www\.)?bringatrailer\.com\//.test(u || '');
+  const extras = Array.isArray(c.scrape_extras) ? c.scrape_extras.filter(x => x && x.type === 'bat_search' && isBat(x.url)) : [];
+  if (c.category !== 'Chinese' && !isBat(c.bat_url) && !extras.length) {
+    warnings.push(name + ': no Bring a Trailer search in bat_url or scrape_extras, so this car is not scraped');
   }
   if (c.low_price > 0 && c.high_price > 0 && (c.avg_price < c.low_price || c.avg_price > c.high_price)) {
     const refused = c.avg_price < c.low_price * 0.8 || c.avg_price > c.high_price * 1.25;
