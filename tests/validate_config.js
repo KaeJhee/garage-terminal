@@ -21,12 +21,21 @@ const errors = [], warnings = [];
   }
 })(ROOT);
 
-let d;
+let d, text;
 try {
-  d = new Function(fs.readFileSync(CONFIG, 'utf8') + ';return {CHART_COLORS, WATCHLIST, TICKER_UNIVERSE};')();
+  text = fs.readFileSync(CONFIG, 'utf8');
+  d = new Function(text + ';return {CHART_COLORS, WATCHLIST, TICKER_UNIVERSE};')();
 } catch (e) {
   console.log('ERROR cars.config.js does not load: ' + e.message);
   process.exit(1);
+}
+
+// The editor's Export reproduces the file exactly, so an upload shows only what changed. A hand edit
+// in another layout still works, but the next Export reformats it and that upload shows extra changes.
+const W = require(path.join(ROOT, 'frontend', 'config-writer.js'));
+if (W.serializeConfig(d.CHART_COLORS, d.WATCHLIST || [], d.TICKER_UNIVERSE || []) !== text) {
+  warnings.push('cars.config.js is not in the editor Export layout (a hand edit, or an old download). It still works. ' +
+    'To tidy it, open the editor, Export with no changes, and upload the file.');
 }
 
 const colors = new Set(Object.values(d.CHART_COLORS || {}));
