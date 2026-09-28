@@ -1,15 +1,20 @@
 """Checks for the sale-parsing and history rules. Run: python tests/test_sales.py"""
+import contextlib
+import io
+import json
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scraper"))
 import scrape_prices as sp        # noqa: E402
 import generate_history as gh     # noqa: E402
-import backfill_history as bf     # noqa: E402
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"   # trimmed copies of real BaT pages
 
 
 def card(lid, title, result, ts=""):
@@ -57,22 +62,15 @@ def test_decide_price():
 def test_history_rules():
     h = {"car": {"sales": [
         {"date": "2024-03-25", "price": 32000, "venue": "bat-backfill"},
-        {"date": "2026-09-27", "price": 32000, "venue": "bat_search"},
-        {"date": "2026-09-20", "price": 32000, "venue": "bat_search"},
-        {"date": "2026-09-20", "price": 45000, "venue": "manual"},
+        {"date": "2024-06-01", "price": 70000, "venue": "manual"},
     ]}}
-    assert gh.drop_legacy_bat_search(h) == 2
-    assert [x["venue"] for x in h["car"]["sales"]] == ["bat-backfill", "manual"]
     listing = {"listing_id": "101", "price": 32000, "date": "2024-03-25", "url": "u", "title": "t", "venue": "bat"}
     assert gh.add_listing_sales(h, "car", [listing], "2026-09-28") == 0     # upgrades the matching backfill entry
     assert h["car"]["sales"][0]["listing_id"] == "101"
     assert gh.add_listing_sales(h, "car", [listing], "2026-10-05") == 0     # same listing next week: not re-added
     other = dict(listing, listing_id="104", price=70000, date="2024-06-01")
-    assert gh.add_listing_sales(h, "car", [other], "2026-09-28") == 1
-    cab = {"price": 45000, "date": None, "venue": "carsandbids"}
-    assert gh.add_listing_sales(h, "car", [cab], "2026-09-28") == 1
-    assert gh.add_listing_sales(h, "car", [cab], "2026-10-05") == 0         # same venue + price inside the lookback
-    assert gh.add_listing_sales(h, "car", [cab], "2027-03-01") == 1         # outside the lookback: a new sale
+    assert gh.add_listing_sales(h, "car", [other], "2026-09-28") == 1       # a 'manual' row is never a twin
+    assert [x["venue"] for x in h["car"]["sales"]] == ["bat-backfill", "manual", "bat"]
 
 
 def test_rejects_are_reported():
@@ -165,16 +163,6 @@ def test_duty_rounds_halves_up_like_the_page():
     assert "import_duty_est:        1163" in out and "total_first_year_extra: 5663" in out, out
 
 
-def test_backfill_skips_unsold_cards():
-    # Wrapped the way real search pages are, so a page-level container can't leak a 'Bid to' price
-    page = '<body class="search search-results"><div class="search-results-loop">' + BAT_PAGE + '</div></body>'
-    got = bf.parse_bat_sold(page, years="1995-1998")
-    assert got == [{"date": "2024-03-25", "price": 32000}, {"date": "2024-06-01", "price": 70000}], got
-    # Two different sales on one day stay two sales (no averaging)
-    text_only = "Sold for USD $50,000 on 5/1/2024. Sold for USD $70,000 on 5/1/2024."
-    assert bf.parse_bat_sold(text_only) == [{"date": "2024-05-01", "price": 50000}, {"date": "2024-05-01", "price": 70000}]
-
-
 def test_averaged_backfill_day_is_replaced():
     h = {"car": {"sales": [{"date": "2025-04-04", "price": 60000, "venue": "bat-backfill"}]}}
     two = [{"listing_id": "a", "price": 50000, "date": "2025-04-04", "venue": "bat"},
@@ -198,21 +186,268 @@ def test_plotted_count_covers_the_chart_year():
     assert (meta["n_total"], meta["n_plotted"], meta["last_sale"]) == (3, 1, "2026-09-28")
 
 
-def test_undated_sold_figures_are_reference_only():
-    pages = {"bat_search": BAT_PAGE, "carsandbids": '<div class="result">Sold for $45,000</div>'}
-    real_fetch, real_delay = sp.fetch, sp.DELAY
-    sp.fetch = lambda client, url: pages["bat_search" if "bringatrailer" in url else "carsandbids"]
-    sp.DELAY = 0
-    car = {"id": "r33", "label": "Nissan Skyline R33 GT-R", "fallback_avg": 40000, "sources": [
-        {"type": "bat_search", "url": "https://bringatrailer.com/x", "years": "1995-1998"},
-        {"type": "carsandbids", "url": "https://carsandbids.com/x"}]}
+@contextlib.contextmanager
+def fake_bat(pages):
+    """Serve fetch() from {url: (status, final_url, html)} and record every URL fetched."""
+    fetched = []
+    def fetch(client, url):
+        fetched.append(url)
+        return pages[url]
+    saved = sp.fetch, sp.DELAY
+    sp.fetch, sp.DELAY = fetch, 0
     try:
-        r = sp.scrape_car(None, car)
+        yield fetched
     finally:
-        sp.fetch, sp.DELAY = real_fetch, real_delay
+        sp.fetch, sp.DELAY = saved
+
+
+def test_scrape_car_uses_bat_cards_only():
+    url = "https://bringatrailer.com/search/?s=r33+gt-r"
+    car = {"id": "r33", "label": "Nissan Skyline R33 GT-R", "fallback_avg": 40000, "sources": [
+        {"type": "bat_search", "url": url, "years": "1995-1998"},
+        {"type": "kbb", "url": "https://www.kbb.com/nissan/gt-r/2020/"}]}
+    with fake_bat({url: (200, url, BAT_PAGE)}) as fetched:
+        r = sp.scrape_car(None, car)
+    assert fetched == [url]                                                  # the kbb extra is never fetched
     assert [x["listing_id"] for x in r["sales"]] == ["101", "104"]
-    assert r["sold_ref"] == 45000 and r["confidence"] == "thin" and r["avg_price"] == 40000
+    assert r["confidence"] == "thin" and r["avg_price"] == 40000
     assert sorted(x["reason"] for x in r["rejected"]) == ["model year", "unsold"]
+    bat, kbb = r["sources"]
+    assert (bat["status"], bat["final_url"], bat["kind"], bat["cards"], bat["items"]) == (200, url, "search", 4, 0)
+    assert bat["rejects"] == {"unsold": 1, "model year": 1, "title filter": 0, "implausible": 0}
+    assert kbb == {"type": "kbb", "url": "https://www.kbb.com/nissan/gt-r/2020/", "skipped": "no scraper"}
+    assert not ({"sold_prices", "n_sales", "venues", "asking_ref", "sold_ref"} & set(r))   # outputs nothing reads
+    assert r["scraped_at"].endswith("+00:00")                                # no more '+00:00Z'
+
+
+def test_model_page_reads_embedded_auctions():
+    # A search that redirected to /aston-martin/v12-vantage/: 2 live cards, 24 completed auctions in JSON
+    page = (FIXTURES / "bat_model_v12_vantage.html").read_text()
+    assert len(sp.parse_bat_cards(page)) == 2 and len(sp.parse_bat_model_items(page)) == 24
+    sales = sp.scrape_bat_search(page, years="2023-Present")
+    assert [(s["listing_id"], s["price"], s["date"]) for s in sales] == [
+        ("116422858", 244000, "2026-08-12"), ("116877974", 302222, "2026-08-03"),
+        ("104775089", 262000, "2026-03-17"), ("104130049", 251823, "2026-01-26")]
+    assert sales[0]["title"] == "2,500-Mile 2023 Aston Martin V12 Vantage Coupe"
+    assert sales[0]["url"] == "https://bringatrailer.com/listing/2023-aston-martin-v12-vantage-coupe-14/"
+    assert sp._SCRAPE_STATS["bat_page"] == {"kind": "model", "cards": 2, "items": 24, "sold_seen": 21,
+                                            "rejects": {"unsold": 3, "model year": 17, "title filter": 0, "implausible": 0}}
+    # Unsold ('Bid to') items and parts under $5,000 never count; the year comes from the title
+    r35 = sp.scrape_bat_search((FIXTURES / "bat_model_gtr_r35.html").read_text(), years="2020-2024")
+    assert [s["listing_id"] for s in r35] == ["117012893"]
+    assert sp._SCRAPE_STATS["bat_page"]["rejects"] == {"unsold": 1, "model year": 2, "title filter": 0, "implausible": 1}
+    nsx = sp.scrape_bat_search((FIXTURES / "bat_model_acura_nsx.html").read_text(), years="1990-2001", exclude=["Zanardi"])
+    assert [s["listing_id"] for s in nsx] == ["121482963", "120486585"]
+    assert sp._SCRAPE_STATS["bat_page"]["rejects"] == {"unsold": 1, "model year": 0, "title filter": 1, "implausible": 1}
+    s13 = sp.scrape_bat_search((FIXTURES / "bat_model_240sx.html").read_text(), years="1989-1994")
+    assert [s["listing_id"] for s in s13] == ["114949770"]
+    assert sorted((r["listing_id"], r["reason"]) for r in sp._SCRAPE_STATS["bat_rejects"]) == [
+        ("112604159", "unsold"), ("116186273", "unsold"), ("120804089", "model year")]
+
+
+def test_search_pages_have_no_embedded_auctions():
+    for name in ("bat_search_mr2.html", "bat_search_z06.html"):
+        page = (FIXTURES / name).read_text()
+        assert sp.parse_bat_model_items(page) is None, name
+    mr2 = sp.scrape_bat_search((FIXTURES / "bat_search_mr2.html").read_text(), years="1991-1995")
+    assert [s["price"] for s in mr2] == [32014, 15250, 5200]
+    assert sp._SCRAPE_STATS["bat_page"] == {"kind": "search", "cards": 4, "items": 0, "sold_seen": 3,
+                                            "rejects": {"unsold": 1, "model year": 0, "title filter": 0, "implausible": 0}}
+
+
+def test_card_and_embedded_item_count_once():
+    item = {"id": 501, "title": "2023 Aston Martin V12 Vantage Coupe", "url": "https://bringatrailer.com/listing/x/",
+            "sold_text": "Sold for USD $250,000 <span> on 9/7/2026 </span>", "timestamp_end": 1788804749, "year": None}
+    script = ("<script>\n        var auctionsCompletedInitialData = "
+              + json.dumps({"items": [item, dict(item, id=502, sold_text="Bid to USD $240,000 <span> on 9/8/2026 </span>")]})
+              + ";\n</script>")
+    # the same listing as a card with a result, and a live card (no result yet) for an embedded auction
+    page = (card(501, "2023 Aston Martin V12 Vantage Coupe", "Sold for USD $250,000 <span>on 9/7/2026</span>")
+            + card(502, "2023 Aston Martin V12 Vantage Coupe", "") + script)
+    sales = sp.scrape_bat_search(page, years="2023-Present")
+    assert [(s["listing_id"], s["price"], s["date"]) for s in sales] == [("501", 250000, "2026-09-07")]
+    assert [(r["listing_id"], r["reason"]) for r in sp._SCRAPE_STATS["bat_rejects"]] == [("502", "unsold")]
+    assert sp._SCRAPE_STATS["bat_page"]["sold_seen"] == 1
+
+
+def test_model_page_redirect_and_404_are_recorded():
+    search = "https://bringatrailer.com/search/?s=aston+vantage+v12"
+    model = "https://bringatrailer.com/aston-martin/v12-vantage/"
+    empty = "https://bringatrailer.com/search/?s=honda+nsx+na1"
+    page = (FIXTURES / "bat_model_v12_vantage.html").read_text()
+    car = {"id": "vantage-gt3", "label": "Aston Martin Vantage", "fallback_avg": 195000, "sources": [
+        {"type": "bat_search", "url": search, "years": "2023-Present"},
+        {"type": "bat_search", "url": empty, "years": "2023-Present"},
+        {"type": "bat_search", "url": search, "years": "2023-Present"}]}      # a repeated search counts nothing twice
+    with fake_bat({search: (200, model, page), empty: (404, empty, None)}):
+        r = sp.scrape_car(None, car)
+    assert (r["confidence"], r["avg_price"]) == ("scraped", 256911)          # median of the four 2023 cars
+    first, missing, again = r["sources"]
+    assert (first["status"], first["final_url"], first["kind"], first["counted"]) == (200, model, "model", 4)
+    assert missing["status"] == 404 and missing["note"].startswith("no results") and "kind" not in missing
+    assert again["counted"] == 0 and len(r["sales"]) == 4
+
+
+def test_chinese_cars_and_non_bat_urls_are_not_fetched():
+    cars = [{"id": "nio-es9", "label": "Nio ES9", "category": "Chinese", "fallback_avg": 78000,
+             "sources": [{"type": "bat_search", "url": "https://bringatrailer.com/search/?s=nio+es9"}]},
+            {"id": "r35-gtr", "label": "Nissan GT-R", "category": "Modern", "fallback_avg": 106000,
+             "sources": [{"type": "bat_search", "url": "https://www.cars.com/shopping/nissan-gt_r-2020/"}]}]
+    with fake_bat({}) as fetched:
+        nio, r35 = (sp.scrape_car(None, c) for c in cars)
+    assert fetched == []
+    assert (nio["confidence"], nio["avg_price"], nio["sources"]) == ("fallback", 78000, [])
+    assert r35["confidence"] == "fallback" and r35["sources"][0]["skipped"] == "not a Bring a Trailer URL"
+
+
+def run_scraper_main(cars, pages):
+    """Run sp.main() on the given cars and pages; returns (exit code or None, written JSON or None)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = sp.load_cars_from_config, sp.OUTPUT_PATH
+        sp.load_cars_from_config, sp.OUTPUT_PATH = (lambda: cars), Path(tmp) / "scraped_prices.json"
+        code = None
+        try:
+            with fake_bat(pages):
+                sp.main()
+        except SystemExit as e:
+            code = e.code
+        finally:
+            out = sp.OUTPUT_PATH
+            sp.load_cars_from_config, sp.OUTPUT_PATH = saved
+        return code, (json.loads(out.read_text()) if out.exists() else None)
+
+
+def test_no_sold_card_anywhere_fails_before_writing():
+    url = "https://bringatrailer.com/search/?s=r33+gt-r"
+    cars = [{"id": "r33", "label": "R33", "fallback_avg": 40000, "sources": [{"type": "bat_search", "url": url}]}]
+    code, written = run_scraper_main(cars, {url: (200, url, BAT_PAGE)})
+    assert code is None and written["prices"]["r33"]["sold_seen"] == 3 and written["thin"] == 1
+    code, written = run_scraper_main(cars, {url: (200, url, "<html><body></body></html>")})   # empty page
+    assert code not in (None, 0) and written is None
+    reworded = BAT_PAGE.replace("Sold for", "Winning Bid")                   # BaT rewords its result line
+    code, written = run_scraper_main(cars, {url: (200, url, reworded)})
+    assert code not in (None, 0) and written is None
+
+
+def test_unsold_reject_never_removes_a_stored_sale():
+    # The 'Winning Bid' simulation: every card now reads as unsold. On HEAD this deleted every stored sale.
+    stored = [{"date": "2024-03-25", "price": 32000, "venue": "bat", "listing_id": "101", "title": "1995 Nissan Skyline GT-R V-Spec"},
+              {"date": "2024-06-01", "price": 70000, "venue": "bat", "listing_id": "104", "title": "1997 Nissan Skyline GT-R"}]
+    h = {"car": {"sales": [dict(x) for x in stored]}}
+    sp.scrape_bat_search(BAT_PAGE.replace("Sold for", "Winning Bid"), years="1995-1998")
+    rejected = sp._SCRAPE_STATS["bat_rejects"]
+    assert {r["reason"] for r in rejected} == {"unsold"} and {"101", "104"} <= {r["listing_id"] for r in rejected}
+    assert gh.reconcile_days(h, "car", [], rejected) == 0
+    assert h["car"]["sales"] == stored
+
+
+def test_phase1_exported_extras_reach_the_scraper():
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    root = Path(__file__).resolve().parent.parent
+    extra = {"type": "bat_search", "url": "https://bringatrailer.com/nissan/gtr-r35/", "years": "2009-2024",
+             "exclude": ["Wheels", "Seats"]}
+    js = ("const W=require(process.argv[1]);const fs=require('fs');"
+          "const d=new Function(fs.readFileSync(process.argv[2],'utf8')+';return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE}')();"
+          "const c=[...d.WATCHLIST,...d.TICKER_UNIVERSE].find(c=>c.id==='r35-gtr');c.scrape_extras=[JSON.parse(process.argv[3])];"
+          "process.stdout.write(W.serializeConfig(d.CHART_COLORS,d.WATCHLIST,d.TICKER_UNIVERSE));")
+    exported = subprocess.run(["node", "-e", js, str(root / "frontend" / "config-writer.js"),
+                               str(root / "frontend" / "cars.config.js"), json.dumps(extra)],
+                              capture_output=True, text=True, check=True).stdout
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "cars.config.js"
+        cfg.write_text(exported)
+        saved, sp.CONFIG_PATH = sp.CONFIG_PATH, cfg
+        try:
+            cars = {c["id"]: c for c in sp.load_cars_from_config()}
+        finally:
+            sp.CONFIG_PATH = saved
+    src = [s for s in cars["r35-gtr"]["sources"] if s.get("note") == "extra"]
+    assert src == [{"type": "bat_search", "url": extra["url"], "note": "extra", "years": "2009-2024",
+                    "exclude": ["Wheels", "Seats"]}], src
+    kw = {k: v for k, v in src[0].items() if k not in ("type", "url", "note")}
+    page = (FIXTURES / "bat_model_gtr_r35.html").read_text()
+    assert [s["listing_id"] for s in sp.scrape_bat_search(page, **kw)] == ["121020553", "119507289", "117012893"]
+
+
+def test_generator_loader_matches_the_scraper_config():
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    cfg = gh.load_cars_from_config()
+    assert len(cfg) == 37 and set(next(iter(cfg.values()))) == set(gh.CONFIG_FIELDS)
+    evo = cfg["evo-vi"]
+    assert evo["title_include"] == ["Makinen", "Mäkinen", "TME"] and evo["years"] == "1999-2001"
+    assert evo["import_duty_pct"] == 0.025 and evo["low_price"] > 0 and evo["high_price"] > evo["low_price"]
+
+
+@contextlib.contextmanager
+def generator_sandbox(scraped=None):
+    """A temp copy of the frontend files with generate_history's paths pointed at it."""
+    root = Path(__file__).resolve().parent.parent
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        for name in ("cars.config.js", "price_history.json", "data.js"):
+            shutil.copy(root / "frontend" / name, tmp / name)
+        if scraped is not None:
+            (tmp / "scraped_prices.json").write_text(json.dumps(scraped))
+        names = ("SCRAPED_PATH", "PRICE_HISTORY_PATH", "DATA_JS_PATH", "CONFIG_JS_PATH")
+        saved = [getattr(gh, n) for n in names] + [sp.CONFIG_PATH]
+        for n, f in zip(names, ("scraped_prices.json", "price_history.json", "data.js", "cars.config.js")):
+            setattr(gh, n, tmp / f)
+        sp.CONFIG_PATH = tmp / "cars.config.js"
+        try:
+            yield tmp
+        finally:
+            for n, v in zip(names, saved):
+                setattr(gh, n, v)
+            sp.CONFIG_PATH = saved[-1]
+
+
+def test_without_a_scrape_only_data_js_is_written():
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    for dev in (False, True):
+        with generator_sandbox() as tmp:
+            before = {f: (tmp / f).read_bytes() for f in ("cars.config.js", "price_history.json")}
+            (tmp / "data.js").write_text("stale")
+            gh.run_generate(dev)
+            assert {f: (tmp / f).read_bytes() for f in before} == before           # store and config untouched
+            assert (tmp / "data.js").read_text().startswith("var BAKED_HISTORY = ")
+            assert sorted(p.name for p in tmp.iterdir()) == ["cars.config.js", "data.js", "price_history.json"]
+
+
+def test_no_new_placeholder_rows_and_stored_rows_kept():
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    store = json.loads((Path(__file__).resolve().parent.parent / "frontend" / "price_history.json").read_text())
+    sold = next(x for x in store["r32-gtr"]["sales"] if x.get("listing_id"))
+    # A fallback car (the old code added a 'manual-auto' row for it) and a stored sale now showing as unsold
+    scraped = {"prices": {"nsx-na1": {"avg_price": 95000, "confidence": "fallback", "sales": [], "rejected": []},
+                          "r32-gtr": {"avg_price": 46000, "confidence": "thin", "sales": [], "rejected": [
+                              {"listing_id": sold["listing_id"], "price": sold["price"], "date": sold["date"], "reason": "unsold"}]}}}
+    with generator_sandbox(scraped) as tmp:
+        gh.run_generate(False)
+        after = json.loads((tmp / "price_history.json").read_text())
+        assert sorted(p.name for p in tmp.iterdir()) == ["cars.config.js", "data.js", "price_history.json", "scraped_prices.json"]
+    assert after == store                                                    # nothing added, nothing removed
+
+
+def test_interrupted_store_write_keeps_the_old_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "price_history.json"
+        path.write_text(json.dumps({"car": {"sales": [{"date": "2024-01-01", "price": 1, "venue": "bat"}] * 700}}))
+        saved_path, saved_replace = gh.PRICE_HISTORY_PATH, gh.os.replace
+        gh.PRICE_HISTORY_PATH = path
+        def killed(src, dst):
+            raise KeyboardInterrupt("killed before the move")
+        gh.os.replace = killed
+        try:
+            gh.save_price_history({"car": {"sales": []}})
+        except KeyboardInterrupt:
+            pass
+        finally:
+            gh.PRICE_HISTORY_PATH, gh.os.replace = saved_path, saved_replace
+        assert len(json.loads(path.read_text())["car"]["sales"]) == 700          # still the whole old store
 
 
 def test_title_filters():
@@ -248,14 +483,17 @@ def test_car_rules_apply_to_stored_listings():
     assert gh.enforce_car_rules(h, "fc", {"years": "2022"}) == 0                          # no rules in effect
 
 
-def test_carsandbids_counts_once():
-    page = '<div class="auction-result">Sold for $45,000</div>'
-    assert sp.scrape_carsandbids(page) == [45000]
-
-
 if __name__ == "__main__":
     fns = [v for k, v in dict(globals()).items() if k.startswith("test_")]
     for fn in fns:
-        fn()
+        # The code under test prints its own progress (e.g. "OK  r33-gtr: avg 32,000->76,000" from a
+        # fixture). Keep it out of the log so it is never mistaken for a real price change; show it on failure.
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                fn()
+        except BaseException:
+            print(out.getvalue())
+            raise
         print(f"PASS {fn.__name__}")
     print(f"{len(fns)} passed")

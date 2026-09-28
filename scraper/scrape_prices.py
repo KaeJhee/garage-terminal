@@ -12,19 +12,27 @@ You never edit this file when adding a new car. Just add the car to
 cars.config.js (with bat_url, market_url, and avg_price fields) and
 the scraper picks it up automatically on the next run.
 
-Sources used per car (auto-derived from cars.config.js):
-  - market_url  -> classic.com market page (parsed by scrape_classic_com)
-  - bat_url     -> Bring a Trailer search (parsed by scrape_bat_search)
-
-Optional per-car overrides via cars.config.js:
-  scrape_extras: [
-    { type: 'kbb',      url: 'https://www.kbb.com/...' },
-    { type: 'edmunds',  url: 'https://www.edmunds.com/...' },
-    { type: 'cargurus', url: 'https://www.cargurus.com/...' },
-  ]
+Bring a Trailer is the only source (the others block the runner):
+  - bat_url     -> a Bring a Trailer search. BaT often redirects a search to
+                   a model page (e.g. /mclaren/720s/); its completed auctions
+                   are read from the page's embedded JSON as well as its cards.
+  - scrape_extras entries of type 'bat_search' are extra BaT searches, each
+    with its own filters:
+      scrape_extras: [
+        { type: 'bat_search', url: 'https://bringatrailer.com/search/?s=...',
+          years: '2017-2020', include: ['Nismo'], exclude: ['Parts'] },
+      ]
+    Entries of any other type are logged as 'no scraper' and never fetched.
+  - market_url is the dashboard's Market link only; it is not scraped.
+Cars in category 'Chinese' are priced by hand and skipped.
 
 Each car's avg_price in cars.config.js is used as the fallback if no
 sources return data.
+
+scraped_prices.json also records, per source, the HTTP status, final URL,
+page kind (search or model), cards and embedded items seen, and reject
+counts by reason. If no page anywhere shows a single sold result, the run
+stops with an error before writing it.
 
 Output: scraper/scraped_prices.json
 Then run generate_history.py to regenerate frontend/data.js.
@@ -48,6 +56,7 @@ import statistics
 import subprocess
 import time
 from datetime import date, datetime, timedelta, timezone
+from html import unescape
 
 UTC = timezone.utc
 from pathlib import Path
@@ -91,7 +100,8 @@ HEADERS = {
 def load_cars_from_config() -> list[dict]:
     """
     Read frontend/cars.config.js and return a unified list of all cars
-    (WATCHLIST + TICKER_UNIVERSE) with the fields needed for scraping.
+    (WATCHLIST + TICKER_UNIVERSE) with the fields needed for scraping, plus
+    the price band and cost fields generate_history.py uses.
 
     Uses Node.js to evaluate the JS file - both WATCHLIST and TICKER_UNIVERSE
     are pure data declarations, no browser APIs needed.
@@ -109,17 +119,27 @@ def load_cars_from_config() -> list[dict]:
         const fn = new Function(code + '; return { WATCHLIST, TICKER_UNIVERSE };');
         const data = fn();
         const all = [...data.WATCHLIST, ...data.TICKER_UNIVERSE];
-        const out = all.map(c => ({
-            id:         c.id,
-            label:      [c.make, c.model].filter(Boolean).join(' '),
-            bat_url:    c.bat_url || null,
-            market_url: c.market_url || null,
-            avg_price:  c.avg_price || 0,
-            years:      c.years || null,
-            title_include: c.bat_title_include || null,
-            title_exclude: c.bat_title_exclude || null,
-            extras:     c.scrape_extras || [],
-        }));
+        const out = all.map(c => {
+            const cto = c.cost_to_own || {};
+            return {
+                id:         c.id,
+                label:      [c.make, c.model].filter(Boolean).join(' '),
+                category:   c.category || null,
+                bat_url:    c.bat_url || null,
+                avg_price:  c.avg_price || 0,
+                low_price:  c.low_price || 0,
+                high_price: c.high_price || 0,
+                import_duty_pct:    cto.import_duty_pct || 0,
+                shipping_est:       cto.shipping_est || 0,
+                registration_est:   cto.registration_est || 0,
+                insurance_annual:   cto.insurance_annual || 0,
+                maintenance_annual: cto.maintenance_annual || 0,
+                years:      c.years || null,
+                title_include: c.bat_title_include || null,
+                title_exclude: c.bat_title_exclude || null,
+                extras:     c.scrape_extras || [],
+            };
+        });
         process.stdout.write(JSON.stringify(out));
     """
 
@@ -143,15 +163,9 @@ def load_cars_from_config() -> list[dict]:
 
     cars = json.loads(result.stdout)
 
-    # Build the source list per car (default 2 sources from URLs + any extras)
+    # Build the source list per car: bat_url plus any extras
     for car in cars:
         sources = []
-        if car.get("market_url"):
-            sources.append({
-                "type": "classic_com",
-                "url":  car["market_url"],
-                "note": "auto: market_url",
-            })
         if car.get("bat_url"):
             sources.append({
                 "type":        "bat_search",
@@ -162,16 +176,7 @@ def load_cars_from_config() -> list[dict]:
                 "exclude":     car.get("title_exclude"),
                 "note":        "auto: bat_url",
             })
-        # Cars & Bids: build a completed-auction search URL from the label.
-        # Modern enthusiast/JDM/exotic coverage; real sold results, scrapeable.
-        cab_q = re.sub(r"\s+", "%20", car["label"].strip())
-        if cab_q:
-            sources.append({
-                "type": "carsandbids",
-                "url":  f"https://carsandbids.com/search/{cab_q}?status=ended",
-                "note": "auto: carsandbids",
-            })
-        # Add any per-car extras (KBB, Edmunds, CarGurus, etc.)
+        # Per-car extras: 'bat_search' entries are scraped, other types are logged and skipped
         for extra in car.get("extras", []) or []:
             if extra.get("type") and extra.get("url"):
                 sources.append({
@@ -190,70 +195,33 @@ def load_cars_from_config() -> list[dict]:
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-def fetch(client: httpx.Client, url: str) -> str | None:
+def fetch(client: httpx.Client, url: str):
+    """GET a page, following redirects. Returns (status, final_url, html).
+    html is None when the request failed or came back with an error status
+    (BaT answers a search that has no results with 404)."""
     try:
         r = client.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
-        r.raise_for_status()
-        return r.text
     except Exception as e:
         print(f"    WARN  fetch failed for {url[:70]}...  -> {e}")
-        return None
+        return None, url, None
+    if r.is_error:
+        print(f"    WARN  HTTP {r.status_code} for {url[:70]}...")
+        return r.status_code, str(r.url), None
+    return r.status_code, str(r.url), r.text
 
 
-def extract_prices_from_text(text: str, min_price=5000, max_price=3_000_000) -> list[int]:
-    prices = []
-    for m in re.finditer(r"\$\s*([\d,]+)", text):
-        val = int(m.group(1).replace(",", ""))
-        if min_price <= val <= max_price:
-            prices.append(val)
-    for m in re.finditer(r"\$\s*([\d.]+)\s*([KMkm])", text):
-        num, suffix = float(m.group(1)), m.group(2).upper()
-        val = int(num * (1_000_000 if suffix == "M" else 1_000))
-        if min_price <= val <= max_price:
-            prices.append(val)
-    return prices
+def is_bat_url(url: str) -> bool:
+    return bool(re.match(r"https?://(www\.)?bringatrailer\.com/", url or "", re.I))
 
 
 # ---------------------------------------------------------------------------
-# Source-specific scrapers
+# Bring a Trailer pages
 # ---------------------------------------------------------------------------
 
-# Per-car volume accumulator. scrape_bat_search writes its real
-# sold-listing count here; scrape_car reads it to set n_sales.
-_SCRAPE_STATS = {"bat_sales": 0, "cab_sales": 0, "bat_rejects": []}
+# scrape_bat_search leaves the cards it rejected and the page's counts here for scrape_car
+_SCRAPE_STATS = {"bat_rejects": [], "bat_page": {}}
 
-def scrape_classic_com(html: str, **_) -> int | None:
-    if not html:
-        return None
-    soup = BeautifulSoup(html, "html.parser")
-
-    for tag in soup.find_all(string=re.compile(r"\bAvg(erage)?\b", re.I)):
-        parent = tag.find_parent()
-        if parent:
-            sib = parent.find_next_sibling()
-            if sib:
-                prices = extract_prices_from_text(sib.get_text())
-                if prices:
-                    return prices[0]
-            prices = extract_prices_from_text(parent.get_text())
-            if prices:
-                return prices[0]
-
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or "")
-            text = json.dumps(data)
-            prices = extract_prices_from_text(text)
-            if prices:
-                return int(statistics.median(prices))
-        except Exception:
-            pass
-
-    all_prices = extract_prices_from_text(soup.get_text())
-    if len(all_prices) >= 3:
-        return int(statistics.median(all_prices))
-    return None
-
+REJECT_REASONS = ("unsold", "model year", "title filter", "implausible")
 
 def parse_years(years):
     """'1995-1998' -> (1995, 1998); '2023-Present' -> (2023, next year), since
@@ -275,8 +243,31 @@ def title_year(title: str):
     return int(m.group(1)) if m else None
 
 
+def bat_listing(listing_id, url, title, result_text, timestamp_end) -> dict:
+    """One BaT listing, in the shape both page readers return:
+    {listing_id, url, title, sold, price, date}. result_text is the result
+    line, such as 'Sold for USD $32,000 on 3/25/2024' or 'Bid to USD $61,000
+    on 4/1/2024'; without a date in it, the auction end timestamp is used."""
+    text = re.sub(r"\s+", " ", result_text or "").strip()
+    pm = re.search(r"\$\s*([\d,]+)", text)
+    dm = re.search(r"on\s+(\d{1,2})/(\d{1,2})/(\d{4})", text)
+    day = None
+    if dm:
+        day = date(int(dm.group(3)), int(dm.group(1)), int(dm.group(2))).isoformat()
+    elif str(timestamp_end or "").isdigit():
+        day = datetime.fromtimestamp(int(timestamp_end), UTC).date().isoformat()
+    return {
+        "listing_id": listing_id,
+        "url":        url,
+        "title":      title,
+        "sold":       bool(re.match(r"sold\b", text, re.I)),
+        "price":      int(pm.group(1).replace(",", "")) if pm else None,
+        "date":       day,
+    }
+
+
 def parse_bat_cards(html: str) -> list:
-    """Every listing card on a BaT search page, sold or not:
+    """Every listing card on a BaT page, sold or not:
     [{listing_id, url, title, sold, price, date}]. Cards carry a
     data-listing_id, a title link, and a result line such as
     'Sold for USD $32,000 on 3/25/2024' or 'Bid to USD $61,000 on 4/1/2024'."""
@@ -289,23 +280,35 @@ def parse_bat_cards(html: str) -> list:
         seen.add(lid)
         link = card.select_one("h3 a[href]") or card.select_one('a[href*="/listing/"]')
         result = card.select_one(".item-results")
-        text = re.sub(r"\s+", " ", result.get_text(" ", strip=True)) if result else ""
-        pm = re.search(r"\$\s*([\d,]+)", text)
-        dm = re.search(r"on\s+(\d{1,2})/(\d{1,2})/(\d{4})", text)
-        day = None
-        if dm:
-            day = date(int(dm.group(3)), int(dm.group(1)), int(dm.group(2))).isoformat()
-        elif card.get("data-timestamp_end", "").isdigit():
-            day = datetime.fromtimestamp(int(card["data-timestamp_end"]), UTC).date().isoformat()
-        cards.append({
-            "listing_id": lid,
-            "url":        link["href"] if link else None,
-            "title":      link.get_text(" ", strip=True) if link else "",
-            "sold":       bool(re.match(r"sold\b", text, re.I)),
-            "price":      int(pm.group(1).replace(",", "")) if pm else None,
-            "date":       day,
-        })
+        cards.append(bat_listing(lid, link["href"] if link else None,
+                                 link.get_text(" ", strip=True) if link else "",
+                                 result.get_text(" ", strip=True) if result else "",
+                                 card.get("data-timestamp_end", "")))
     return cards
+
+
+def parse_bat_model_items(html: str):
+    """A BaT model page (a search often redirects to one, e.g. /mclaren/720s/)
+    renders few or no cards, but embeds its 24 most recent completed auctions
+    as JSON: 'var auctionsCompletedInitialData = {"items": [...]};'. Returns
+    those auctions in the parse_bat_cards shape, or None when the page has no
+    such JSON (a search page)."""
+    m = re.search(r"\bvar\s+auctionsCompletedInitialData\s*=\s*", html)
+    if not m:
+        return None
+    try:
+        data, _ = json.JSONDecoder().raw_decode(html, m.end())
+    except ValueError as e:
+        print(f"       WARN  model page auction data unreadable: {e}")
+        return []
+    items = []
+    for it in data.get("items") or []:
+        if not it.get("id"):
+            continue
+        result = unescape(re.sub(r"<[^>]+>", " ", it.get("sold_text") or ""))
+        items.append(bat_listing(str(it["id"]), it.get("url"), unescape(it.get("title") or "").strip(),
+                                 result, it.get("timestamp_end")))
+    return items
 
 
 def card_verdict(card, span, include=None, exclude=None):
@@ -327,132 +330,47 @@ def card_verdict(card, span, include=None, exclude=None):
 
 def scrape_bat_search(html: str, search_term: str = "", years=None, include=None, exclude=None, **_) -> list:
     """Real BaT sales for this car: one dict per SOLD listing, keyed by its
-    listing ID, dated to the auction end. Unsold auctions ('Bid to'), listings
-    outside the car's model years, and titles failing the car's include or
-    exclude words are skipped and reported as rejects."""
+    listing ID, dated to the auction end. Reads the page's listing cards and,
+    on a model page, its embedded completed auctions, counting each listing
+    once. Unsold auctions ('Bid to'), listings outside the car's model years,
+    and titles failing the car's include or exclude words are skipped and
+    reported as rejects. The page's counts go to _SCRAPE_STATS['bat_page']."""
+    _SCRAPE_STATS["bat_rejects"], _SCRAPE_STATS["bat_page"] = [], {}
     if not html:
         return []
     span = parse_years(years)
+    cards = parse_bat_cards(html)
+    items = parse_bat_model_items(html)
+    listings = {}
+    for c in cards + (items or []):
+        have = listings.get(c["listing_id"])
+        if have is None or (have["price"] is None and c["price"]):
+            listings[c["listing_id"]] = c
     sales, rejects = [], []
-    for c in parse_bat_cards(html):
-        if not c["price"] or not (5000 <= c["price"] <= 3_000_000):
+    counts = dict.fromkeys(REJECT_REASONS, 0)
+    for c in listings.values():
+        if not c["price"]:
+            continue
+        if not (5000 <= c["price"] <= 3_000_000):
+            counts["implausible"] += 1
             continue
         why = card_verdict(c, span, include, exclude)
         if why:
+            counts[why] += 1
             if c["date"]:
                 rejects.append({"listing_id": c["listing_id"], "price": c["price"], "date": c["date"], "reason": why})
             continue
         sales.append({"listing_id": c["listing_id"], "url": c["url"], "title": c["title"],
                       "price": c["price"], "date": c["date"], "venue": "bat"})
-    _SCRAPE_STATS["bat_sales"] = len(sales)
     _SCRAPE_STATS["bat_rejects"] = rejects
+    _SCRAPE_STATS["bat_page"] = {
+        "kind":      "search" if items is None else "model",
+        "cards":     len(cards),
+        "items":     len(items or []),
+        "sold_seen": sum(1 for c in listings.values() if c["sold"]),
+        "rejects":   counts,
+    }
     return sales
-
-
-def scrape_kbb(html: str, **_) -> int | None:
-    if not html:
-        return None
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(string=re.compile(r"fair\s+purchase|fair\s+market", re.I)):
-        parent = tag.find_parent()
-        if parent:
-            prices = extract_prices_from_text(parent.get_text())
-            if prices:
-                return prices[0]
-            section = parent.find_parent()
-            if section:
-                prices = extract_prices_from_text(section.get_text())
-                if prices:
-                    return int(statistics.median(prices))
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or "")
-            text = json.dumps(data)
-            prices = extract_prices_from_text(text)
-            if prices:
-                return int(statistics.median(prices))
-        except Exception:
-            pass
-    return None
-
-
-def scrape_edmunds(html: str, **_) -> int | None:
-    if not html:
-        return None
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(string=re.compile(r"avg\s+list|average\s+list|typical", re.I)):
-        parent = tag.find_parent()
-        if parent:
-            prices = extract_prices_from_text(parent.get_text())
-            if prices:
-                return prices[0]
-    all_prices = extract_prices_from_text(soup.get_text())
-    if len(all_prices) >= 3:
-        return int(statistics.median(all_prices))
-    return None
-
-
-def scrape_cargurus(html: str, **_) -> int | None:
-    if not html:
-        return None
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(string=re.compile(r"avg\s+list|average\s+price|market\s+avg", re.I)):
-        parent = tag.find_parent()
-        if parent:
-            prices = extract_prices_from_text(parent.get_text())
-            if prices:
-                return prices[0]
-    all_prices = extract_prices_from_text(soup.get_text())
-    if len(all_prices) >= 3:
-        return int(statistics.median(all_prices))
-    return None
-
-
-def scrape_carsandbids(html: str, **_) -> list:
-    """Cars & Bids completed-auction results. Returns ALL individual sold
-    prices (list[int]). C&B marks results with 'Sold for $X'; bids that did
-    not meet reserve show 'Bid to $X' and are excluded (asking, not sold)."""
-    if not html:
-        return []
-    soup = BeautifulSoup(html, "html.parser")
-    sold = []
-    text = re.sub(r"\s+", " ", soup.get_text())
-    # Only "Sold for $X" - exclude "Bid to $X" (reserve not met)
-    for m in re.finditer(r"sold\s+for\s+\$?([\d,]{4,})", text, re.I):
-        try:
-            val = int(m.group(1).replace(",", ""))
-            if 5000 <= val <= 3_000_000:
-                sold.append(val)
-        except ValueError:
-            pass
-    # structured cards
-    for card in soup.find_all(class_=re.compile(r"auction|result|listing", re.I)):
-        t = card.get_text(" ", strip=True)
-        if re.search(r"sold\s+for", t, re.I):
-            for p in extract_prices_from_text(t):
-                if 5000 <= p <= 3_000_000:
-                    sold.append(p)
-    sold = list(dict.fromkeys(sold))   # both passes see the same results; count each price once
-    _SCRAPE_STATS["cab_sales"] = len(sold)
-    return sold
-
-
-SCRAPER_MAP = {
-    "classic_com":  scrape_classic_com,
-    "bat_search":   scrape_bat_search,
-    "carsandbids":  scrape_carsandbids,
-    "kbb":          scrape_kbb,
-    "edmunds":      scrape_edmunds,
-    "cargurus":     scrape_cargurus,
-}
-
-# Which source types report SOLD results vs ASKING prices. Asking prices
-# (dealer/retail listings) are reference only - they bias high. Among sold
-# sources, only dated listings with IDs (Bring a Trailer) set the price and
-# become plotted sales; undated sold figures (Cars & Bids, classic.com's
-# market average) are kept as reference.
-SOLD_SOURCES   = {"classic_com", "bat_search", "carsandbids"}
-ASKING_SOURCES = {"kbb", "edmunds", "cargurus"}
 
 
 # ---------------------------------------------------------------------------
@@ -479,78 +397,76 @@ def scrape_car(client: httpx.Client, car: dict) -> dict:
     car_id   = car["id"]
     label    = car["label"]
     fallback = car["fallback_avg"]
-    sales         = []   # real sold listings: {price, date, venue, listing_id, ...}
-    sold_ref      = []   # sold figures with no listing ID or date (reference only)
-    asking_prices = []   # dealer/retail asking (reference only, biased high)
-    venues = []          # which sold venues returned data
-    _SCRAPE_STATS["bat_sales"] = 0
-    _SCRAPE_STATS["cab_sales"] = 0
-    _SCRAPE_STATS["bat_rejects"] = []
+    sales, rejected = [], []   # sold BaT listings {price, date, listing_id, ...}; cards that don't count
+    diags = []                 # one per source: what was fetched and what the page held
 
     print(f"\n  [{car_id}] {label}")
-    for source in car["sources"]:
-        src_type = source["type"]
-        url      = source["url"]
-        print(f"    -> {src_type}: {url[:65]}...")
-
-        html = fetch(client, url)
+    sources = car["sources"]
+    if car.get("category") == "Chinese":
+        print("    --  category 'Chinese' is priced by hand, not scraped")
+        sources = []
+    for source in sources:
+        url = source["url"]
+        print(f"    -> {source['type']}: {url[:65]}...")
+        diag = {"type": source["type"], "url": url}
+        diags.append(diag)
+        if source["type"] != "bat_search":
+            diag["skipped"] = "no scraper"
+            print(f"       --  no scraper for type '{source['type']}', not fetched")
+            continue
+        if not is_bat_url(url):
+            diag["skipped"] = "not a Bring a Trailer URL"
+            print("       --  not a Bring a Trailer URL, not fetched")
+            continue
+        status, final_url, html = fetch(client, url)
+        diag["status"], diag["final_url"] = status, final_url
+        if status == 404:
+            diag["note"] = "no results (BaT returns 404 for a search with no results)"
+            print("       --  no results: BaT answered 404")
         if html:
-            fn = SCRAPER_MAP.get(src_type)
-            if fn:
-                kw = {k: v for k, v in source.items() if k not in ("type", "url", "note")}
-                result = fn(html, **kw)
-                # normalize: scrapers may return list[int] (sold pools) or int (single)
-                vals = result if isinstance(result, list) else ([result] if result else [])
-                vals = [v for v in vals if v]
-                if vals:
-                    if src_type in SOLD_SOURCES:
-                        found = [v for v in vals if isinstance(v, dict)]
-                        undated = [int(v) for v in vals if not isinstance(v, dict)]
-                        sales.extend(found)
-                        sold_ref.extend(undated)
-                        if found:
-                            venues.append(src_type)
-                            print(f"       OK  {len(found)} sold from {src_type} (median ${int(statistics.median(s['price'] for s in found)):,})")
-                        if undated:
-                            # No listing ID or end date: can't be counted once or dated, so reference only
-                            print(f"       ~~  {len(undated)} undated sold figure(s) from {src_type} (reference only)")
-                    else:
-                        asking_prices.extend(vals)
-                        print(f"       ~~  {len(vals)} ASKING from {src_type} (reference only)")
-                else:
-                    print(f"       --  no price parsed from {src_type}")
+            kw = {k: v for k, v in source.items() if k not in ("type", "url", "note")}
+            found = scrape_bat_search(html, **kw)
+            page = _SCRAPE_STATS["bat_page"]
+            diag.update(page)
+            rejected += _SCRAPE_STATS["bat_rejects"]
+            have = {s["listing_id"] for s in sales}
+            found = [s for s in found if s["listing_id"] not in have]   # another source already counted it
+            if fallback:
+                lo_b, hi_b = fallback * 0.25, fallback * 4.0
+                kept = [s for s in found if lo_b <= s["price"] <= hi_b]
+                if len(kept) != len(found):
+                    print(f"       filtered {len(found)-len(kept)} implausible price(s)")
+                page["rejects"]["implausible"] += len(found) - len(kept)
+                found = kept
+            diag["counted"] = len(found)
+            sales += found
+            moved = f" -> {final_url}" if final_url != url else ""
+            print(f"       {page['kind']} page{moved}: {page['cards']} cards, {page['items']} embedded auctions, "
+                  f"{page['sold_seen']} sold; rejects: " + (", ".join(f"{k} {v}" for k, v in page["rejects"].items() if v) or "none"))
+            if found:
+                print(f"       OK  {len(found)} sold (median ${int(statistics.median(s['price'] for s in found)):,})")
             else:
-                print(f"       --  no scraper for type '{src_type}'")
+                print("       --  no sold listings counted")
         time.sleep(DELAY)
 
-    if fallback:
-        lo_b, hi_b = fallback * 0.25, fallback * 4.0
-        kept = [s for s in sales if lo_b <= s["price"] <= hi_b]
-        if len(kept) != len(sales):
-            print(f"       filtered {len(sales)-len(kept)} implausible price(s)")
-        sales = kept
     avg, confidence, recent = decide_price(sales, fallback)
     if confidence == "scraped":
-        print(f"    OK  {car_id}: median ${avg:,}  (n={len(recent)} recent sold across {len(set(venues))} venue(s))")
+        print(f"    OK  {car_id}: median ${avg:,}  (n={len(recent)} recent sold)")
     elif confidence == "thin":
         print(f"    ~~  {car_id}: only {len(recent)} recent sale(s), keeping ${avg:,} (needs {MIN_SALES_FOR_PRICE})")
     else:
         print(f"    -- {car_id}: no sold data, fallback ${avg:,}")
-    sold_prices = [s["price"] for s in recent]
 
     return {
-        "id":           car_id,
-        "label":        label,
-        "avg_price":    avg,                       # median of sold
-        "confidence":   confidence,
-        "n_sales":      len(sold_prices),          # recent qualifying sales behind the price
-        "sold_prices":  sold_prices,               # their prices (kept for older readers)
-        "sales":        sales,                     # every sold listing found, with id + real date
-        "rejected":     _SCRAPE_STATS["bat_rejects"],  # unsold / wrong-year cards seen, for purging old entries
-        "venues":       sorted(set(venues)),
-        "asking_ref":   int(statistics.median(asking_prices)) if asking_prices else None,
-        "sold_ref":     int(statistics.median(sold_ref)) if sold_ref else None,
-        "scraped_at":   datetime.now(UTC).isoformat() + "Z",
+        "id":         car_id,
+        "label":      label,
+        "avg_price":  avg,              # median of recent sold
+        "confidence": confidence,
+        "sales":      sales,            # every sold listing found, with id + real date
+        "rejected":   rejected,         # unsold / wrong-year / filtered cards seen, for purging old entries
+        "sold_seen":  sum(d.get("sold_seen", 0) for d in diags),   # sold results on the pages, before any filter
+        "sources":    diags,            # per source: status, final_url, kind, cards, items, reject counts
+        "scraped_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
 
 
@@ -573,7 +489,7 @@ def main():
 
     skipped = [c for c in cars if not c["sources"]]
     if skipped:
-        print(f"  WARN  {len(skipped)} cars have no bat_url or market_url, will use fallback only:")
+        print(f"  WARN  {len(skipped)} cars have no bat_url, will use fallback only:")
         for c in skipped:
             print(f"        - {c['id']}")
 
@@ -583,8 +499,14 @@ def main():
             result = scrape_car(client, car)
             results.append(result)
 
+    # A BaT layout change reads as zero sold results everywhere. Stop before
+    # writing, so the weekly job fails instead of committing an empty week.
+    if results and not any(r["sold_seen"] for r in results):
+        raise SystemExit("ERROR  No page showed a single sold result. Bring a Trailer may have changed its "
+                         "layout or blocked the runner. scraped_prices.json was NOT written.")
+
     output = {
-        "scraped_at": datetime.now(UTC).isoformat() + "Z",
+        "scraped_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "total_cars": len(results),
         "scraped":    sum(1 for r in results if r["confidence"] == "scraped"),
         "fallback":   sum(1 for r in results if r["confidence"] == "fallback"),
