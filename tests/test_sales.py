@@ -120,22 +120,20 @@ def test_reconcile_removes_blended_backfill_rows():
 def test_band_guard():
     cfg = ("  {\n    id:         'v',\n    avg_price:  195000,\n    low_price:  150000,\n"
            "    high_price: 280000,\n    prev_avg:   195000,\n  },")
-    meta = {"v": {"import_duty_pct": 0}}
-    out = gh.patch_config_prices(cfg, {"v": {"price": 27000, "confidence": "scraped"}}, meta)
+    out = gh.patch_config_prices(cfg, {"v": {"price": 27000, "confidence": "scraped"}})
     assert "avg_price:  195000" in out                                        # far below the band: refused
-    out = gh.patch_config_prices(cfg, {"v": {"price": 210000, "confidence": "scraped"}}, meta)
+    out = gh.patch_config_prices(cfg, {"v": {"price": 210000, "confidence": "scraped"}})
     assert "avg_price:  210000" in out and "prev_avg:   195000" in out     # inside the band: applied
 
 
 def test_unchanged_price_keeps_the_change_arrow():
     cfg = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n"
            "    high_price: 80000,\n    prev_avg:   45000,\n  },")
-    meta = {"r32": {"import_duty_pct": 0}}
     same = {"r32": {"price": 46000, "confidence": "scraped"}}
-    assert gh.patch_config_prices(cfg, same, meta) == cfg                   # re-runs leave prev_avg alone
-    moved = gh.patch_config_prices(cfg, {"r32": {"price": 50000, "confidence": "scraped"}}, meta)
+    assert gh.patch_config_prices(cfg, same) == cfg                         # re-runs leave prev_avg alone
+    moved = gh.patch_config_prices(cfg, {"r32": {"price": 50000, "confidence": "scraped"}})
     assert "avg_price:  50000" in moved and "prev_avg:   46000" in moved     # a real move records the old price
-    assert gh.patch_config_prices(moved, {"r32": {"price": 50000, "confidence": "scraped"}}, meta) == moved
+    assert gh.patch_config_prices(moved, {"r32": {"price": 50000, "confidence": "scraped"}}) == moved
 
 
 def test_editor_export_still_patches():
@@ -156,25 +154,27 @@ def test_editor_export_still_patches():
             new = int(round((lo + hi) / 2, -2))
             moves[cid] = new + 100 if new == m["avg_price"] else new
     assert moves
-    out = gh.patch_config_prices(exported, {c: {"price": p, "confidence": "scraped"} for c, p in moves.items()}, meta)
+    out = gh.patch_config_prices(exported, {c: {"price": p, "confidence": "scraped"} for c, p in moves.items()})
     for cid, new in moves.items():
         start = out.index(f"id:         '{cid}'")
         block = out[start:out.index("\n  },", start)]
         assert re.search(rf"avg_price:\s*{new}\b", block), block
         assert re.search(rf"prev_avg:\s*{meta[cid]['avg_price']}\b", block), block
-        if meta[cid]["import_duty_pct"]:
-            duty = gh.js_round(new * meta[cid]["import_duty_pct"])
-            assert re.search(rf"import_duty_est:\s*{duty}\b", block), block
+    assert "import_duty_est" not in out and "total_first_year_extra" not in out
 
 
-def test_duty_rounds_halves_up_like_the_page():
-    assert (gh.js_round(1162.5), gh.js_round(562.5), gh.js_round(1162.4), gh.js_round(0)) == (1163, 563, 1162, 0)
-    cfg = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n    high_price: 80000,\n"
+def test_patch_changes_only_avg_and_prev():
+    # The page derives duty and the first-year total, so the weekly patch writes neither. An older
+    # file that still carries them is patched without touching them.
+    old = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n    high_price: 80000,\n"
            "    prev_avg:   45000,\n    cost_to_own: {\n      import_duty_pct:        0.025,\n      import_duty_est:        1150,\n"
            "      shipping_est:           4500,\n      total_first_year_extra: 5650,\n    },\n  },")
-    meta = {"r32": {"import_duty_pct": 0.025, "shipping_est": 4500}}
-    out = gh.patch_config_prices(cfg, {"r32": {"price": 46500, "confidence": "scraped"}}, meta)
-    assert "import_duty_est:        1163" in out and "total_first_year_extra: 5663" in out, out
+    out = gh.patch_config_prices(old, {"r32": {"price": 46500, "confidence": "scraped"}})
+    assert out == old.replace("avg_price:  46000", "avg_price:  46500").replace("prev_avg:   45000", "prev_avg:   46000"), out
+    new = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n    high_price: 80000,\n"
+           "    prev_avg:   45000,\n    cost_to_own: {\n      import_duty_pct:        0.025,\n      shipping_est:           4500,\n    },\n  },")
+    out = gh.patch_config_prices(new, {"r32": {"price": 46500, "confidence": "scraped"}})
+    assert out == new.replace("avg_price:  46000", "avg_price:  46500").replace("prev_avg:   45000", "prev_avg:   46000"), out
 
 
 def test_averaged_backfill_day_is_replaced():

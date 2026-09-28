@@ -1,60 +1,12 @@
-/**
- * ============================================================
- * GARAGE TERMINAL - CAR CONFIGURATION
- * ============================================================
- *
- * SINGLE SOURCE OF TRUTH. The chart, ticker, watchlist, scraper,
- * and price history all read from this file.
- *
- * EASIEST WAY TO EDIT: the dashboard CONFIG button (gear, top bar).
- * Add/edit cars, Preview live, Export this file, commit it. The
- * editor derives the duty fields and writes colors for you.
- *
- * BY HAND: copy a car block from WATCHLIST or TICKER_UNIVERSE,
- * paste at the end of the array, change the fields, commit.
- * Full guide: HOW_TO_ADD_A_CAR.md
- *
- * ============================================================
- * FIELD REFERENCE
- * ============================================================
- *
- * id          -> Unique slug, lowercase, hyphens only.
- * symbol      -> Ticker label, uppercase, no spaces.
- * make/model  -> Display info. model is the chart header.
- * years       -> Production years, e.g. "1995-1998".
- * category    -> JDM | Modern | Exotic | Muscle | European | Chinese
- * engine/power-> Specs strip text.
- * avg_price   -> Current market price USD (integer). Scraper
- *                overwrites this weekly for US-market cars.
- * low/high    -> Range ends for the price gauge.
- * prev_avg    -> Prior value, drives the delta arrow.
- * color       -> CHART_COLORS.<name> (see palette below).
- * note        -> One-line market insight.
- * bat_url     -> Bring a Trailer search URL (scraped).
- * market_url  -> Market link on the dashboard (not scraped).
- * cost_to_own -> First-year ownership costs:
- *   insurance_annual, insurance_note,
- *   import_duty_pct (0 for US-spec), shipping_est,
- *   maintenance_annual, maintenance_note,
- *   registration_est (OPTIONAL, imports),
- *   import_note (OPTIONAL, imports).
- *
- * DERIVED, DO NOT SET: import_duty_est and total_first_year_extra
- * are computed live from avg_price * import_duty_pct + flat costs.
- *
- * PRICING: only SOLD Bring a Trailer listings set the price, as the
- * MEDIAN of the last two years, once there are 3 or more sales.
- *
- * ============================================================
- * CHART COLORS
- * ============================================================
- */
+// cars.config.js: Garage Terminal's single source of truth for every car.
+// Edit it with the dashboard's CONFIG editor. Field guide: HOW_TO_ADD_A_CAR.md
+
 var CHART_COLORS = {
-  amber:   '#e8a020',   // R33 GTR (in use)
-  teal:    '#3cb8c0',   // R32 GTR (in use)
-  green:   '#3ab86e',   // Supra A80 (in use)
-  blue:    '#4b8ef5',   // R35 GTR (in use)
-  purple:  '#a06ef0',   // Huracan STO (in use)
+  amber:   '#e8a020',
+  teal:    '#3cb8c0',
+  green:   '#3ab86e',
+  blue:    '#4b8ef5',
+  purple:  '#a06ef0',
   orange:  '#f5804b',
   pink:    '#f06ea0',
   cyan:    '#22d3ee',
@@ -67,14 +19,7 @@ var CHART_COLORS = {
   mint:    '#6ee7b7',
 };
 
-/**
- * ============================================================
- * WATCHLIST - Cars shown in the sidebar and on the main chart
- * ============================================================
- */
 var WATCHLIST = [
-
-  // DREAM CAR
   {
     id:         'r33-gtr',
     symbol:     'R33GTR',
@@ -96,15 +41,12 @@ var WATCHLIST = [
       insurance_annual:       750,
       insurance_note:         'Hagerty/Grundy specialty classic car policy',
       import_duty_pct:        0.025,
-      import_duty_est:        800,
       shipping_est:           4500,
       maintenance_annual:     1200,
       maintenance_note:       'RB26 oil, boost system, intercooler service',
-      total_first_year_extra: 7250,
     },
   },
 
-  // JDM LEGENDS
   {
     id:         'r32-gtr',
     symbol:     'R32GTR',
@@ -126,11 +68,9 @@ var WATCHLIST = [
       insurance_annual:       700,
       insurance_note:         'Hagerty specialty classic; older platform, limited value',
       import_duty_pct:        0.025,
-      import_duty_est:        1150,
       shipping_est:           4500,
       maintenance_annual:     1500,
       maintenance_note:       'RB26 service + age-related rubber, seals, hoses',
-      total_first_year_extra: 7850,
     },
   },
 
@@ -155,15 +95,12 @@ var WATCHLIST = [
       insurance_annual:       800,
       insurance_note:         'Specialty classic policy; Hagerty/Grundy for A80',
       import_duty_pct:        0.025,
-      import_duty_est:        2038,
       shipping_est:           4500,
       maintenance_annual:     900,
       maintenance_note:       '2JZ-GTE turbo service; RepairPal est. $561-$810/yr',
-      total_first_year_extra: 8238,
     },
   },
 
-  // MODERN
   {
     id:         'r35-gtr',
     symbol:     'R35GTR',
@@ -188,15 +125,12 @@ var WATCHLIST = [
       insurance_annual:       4200,
       insurance_note:         'TheZebra/CarEdge full coverage; supercar premium rate',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     2500,
       maintenance_note:       'US-spec; Nissan dealer service + performance intervals',
-      total_first_year_extra: 6700,
     },
   },
 
-  // EXOTIC
   {
     id:         'huracan-sto',
     symbol:     'HURASTO',
@@ -218,35 +152,12 @@ var WATCHLIST = [
       insurance_annual:       8500,
       insurance_note:         'STO track-spec premium; Way.com $2,626 base + STO uplift',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     4500,
       maintenance_note:       'CarBuzz: $850-1,500/yr basic + $3,500-6,000 major/5yr',
-      total_first_year_extra: 13000,
     },
   },
 
-  // ADD NEW WATCHLIST CARS BELOW THIS LINE
-  // (User-promoted cars from the ticker are stored in localStorage
-  //  and merged at runtime. To make permanent, paste the snippet
-  //  produced by the "Move to Watchlist" copy button here.)
-
-
-  // ============================================================
-  // CHINESE NEV FLAGSHIPS - grey-market import cost modeling
-  // ------------------------------------------------------------
-  // These are NOT US-legal. No FMVSS/EPA certification and they are
-  // brand new, so the 25-yr import exemption does not apply. Realistic
-  // routes are Show-or-Display (NHTSA, ~2,500 mi/yr cap, rarely granted)
-  // or off-road/private use only. Costs modeled as worst-case landed.
-  //
-  // TARIFF: Section 301 levies 100% on Chinese pure-BEVs (HTS 8703.80)
-  // on top of the 2.5% MFN auto duty. Plug-in hybrids and EREVs fall
-  // under different HTS codes that carry the 25% Section 301 rate, not
-  // the 100%, so the PHEV/EREV cars below model ~37.5% effective.
-  // Rates current as of mid-2026; adjust import_duty_pct if policy moves.
-  // avg_price = China market value converted to USD (the car itself).
-  // ============================================================
   {
     id:         'nio-es9',
     symbol:     'NIO-ES9',
@@ -267,17 +178,16 @@ var WATCHLIST = [
     cost_to_own: {
       insurance_annual:       3200,
       insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
-      import_duty_pct:        1.00,
-      import_duty_est:        78000,
+      import_duty_pct:        1,
       shipping_est:           5000,
       registration_est:       4500,
       registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
       import_note:            'Pure BEV: 100% Section 301 + 2.5% MFN. Shipped Shanghai -> US West Coast (container).',
       maintenance_annual:     3500,
       maintenance_note:       'No US dealer network. Parts air-freighted from China; specialist labor only.',
-      total_first_year_extra: 94200,
     },
   },
+
   {
     id:         'zeekr-9x',
     symbol:     'ZEEKR9X',
@@ -299,16 +209,15 @@ var WATCHLIST = [
       insurance_annual:       3000,
       insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
       import_duty_pct:        0.375,
-      import_duty_est:        28125,
       shipping_est:           5000,
       registration_est:       4500,
       registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
       import_note:            'PHEV: 2.5% MFN + 25% Section 301 + ~10% surcharge. Shipped Ningbo -> US West Coast.',
       maintenance_annual:     3000,
       maintenance_note:       'No US dealer network. Geely/Zeekr parts import + specialist labor.',
-      total_first_year_extra: 43625,
     },
   },
+
   {
     id:         'aito-m9',
     symbol:     'AITO-M9',
@@ -330,41 +239,17 @@ var WATCHLIST = [
       insurance_annual:       2800,
       insurance_note:         'Specialty/agreed-value; no US support network raises risk loading',
       import_duty_pct:        0.375,
-      import_duty_est:        26250,
       shipping_est:           5000,
       registration_est:       4500,
       registration_note:      'Customs broker + bond + Show-or-Display filing + state reg. Road use likely not approvable.',
       import_note:            'EREV: 2.5% MFN + 25% Section 301 + ~10% surcharge. Shipped Shanghai -> US West Coast.',
       maintenance_annual:     3200,
       maintenance_note:       'No US dealer network. Huawei HarmonyOS + Seres parts via import; specialist labor.',
-      total_first_year_extra: 41750,
     },
   },
 ];
 
-/**
- * ============================================================
- * TICKER UNIVERSE - Cars in the scrolling ticker
- * ============================================================
- *
- * Every ticker entry uses the FULL watchlist schema. Click any
- * ticker symbol on the dashboard to open its detail panel with
- * a 90-day sparkline, listing links, and a "Move to Watchlist"
- * button that promotes the car to the main chart.
- *
- * Prices are estimates based on April 2026 market references
- * (Classic.com averages, BaT auction medians, KBB/Edmunds where
- * applicable). Update them when refreshing watchlist data.
- *
- * Maintenance/insurance estimates assume a clean, drivable
- * example with specialty insurance for classics (Hagerty/Grundy)
- * or full-coverage for moderns (TheZebra/CarEdge baseline).
- */
 var TICKER_UNIVERSE = [
-
-  // ==========================================================
-  // JDM ICONS
-  // ==========================================================
   {
     id:         'nsx-na1',
     symbol:     'NSX-NA1',
@@ -386,13 +271,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       800,
       insurance_note:         'Hagerty agreed-value classic policy',
       import_duty_pct:        0.025,
-      import_duty_est:        2587,
       shipping_est:           4500,
       maintenance_annual:     1500,
       maintenance_note:       'Timing belt every 7 yrs/90K (~$3K). Mid-engine service involved.',
-      total_first_year_extra: 9387,
     },
   },
+
   {
     id:         'fd-rx7',
     symbol:     'FD-RX7',
@@ -414,13 +298,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty classic; rotary platform raises rate slightly',
       import_duty_pct:        0.025,
-      import_duty_est:        922,
       shipping_est:           4500,
       maintenance_annual:     1500,
       maintenance_note:       'Rotary: premix oil, apex seal monitoring, twin-turbo system',
-      total_first_year_extra: 7622,
     },
   },
+
   {
     id:         'evo-vi',
     symbol:     'EVO-VI',
@@ -443,13 +326,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       800,
       insurance_note:         'Hagerty agreed-value; rally heritage qualifies',
       import_duty_pct:        0.025,
-      import_duty_est:        1389,
       shipping_est:           4500,
       maintenance_annual:     1300,
       maintenance_note:       '4G63T turbo service, AYC/ACD diff fluid, Recaro repairs',
-      total_first_year_extra: 7989,
     },
   },
+
   {
     id:         'sti-ra',
     symbol:     'STI-RA',
@@ -471,13 +353,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty specialty; 25-yr classic eligible',
       import_duty_pct:        0.025,
-      import_duty_est:        519,
       shipping_est:           4500,
       maintenance_annual:     1200,
       maintenance_note:       'EJ20 head gaskets, turbo, AWD service intervals',
-      total_first_year_extra: 6919,
     },
   },
+
   {
     id:         's15-spec',
     symbol:     'S15-SPEC',
@@ -500,13 +381,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty classic; drift-modified examples may not qualify',
       import_duty_pct:        0.025,
-      import_duty_est:        1112,
       shipping_est:           4500,
       maintenance_annual:     1100,
       maintenance_note:       'SR20DET turbo service, RHD-specific parts sourcing',
-      total_first_year_extra: 7412,
     },
   },
+
   {
     id:         'nsx-r',
     symbol:     'NSX-R',
@@ -528,13 +408,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       1500,
       insurance_note:         'Hagerty agreed-value; high stated value',
       import_duty_pct:        0.025,
-      import_duty_est:        4625,
       shipping_est:           4500,
       maintenance_annual:     2200,
       maintenance_note:       'Type R-specific service. Dry sump on later cars.',
-      total_first_year_extra: 12825,
     },
   },
+
   {
     id:         'ae86',
     symbol:     'AE86',
@@ -556,13 +435,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       650,
       insurance_note:         'Hagerty classic; clean originals only',
       import_duty_pct:        0.025,
-      import_duty_est:        575,
       shipping_est:           4500,
       maintenance_annual:     900,
       maintenance_note:       '4A-GE valve adjustments, age-related rust, original interior',
-      total_first_year_extra: 6625,
     },
   },
+
   {
     id:         'r34-gtr',
     symbol:     'R34-GTR',
@@ -584,13 +462,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       1500,
       insurance_note:         'Hagerty agreed-value; high stated value for V-Specs',
       import_duty_pct:        0.025,
-      import_duty_est:        7880,
       shipping_est:           4500,
       maintenance_annual:     1800,
       maintenance_note:       'RB26 service, ATTESA/ETS hydraulic, Brembo refresh',
-      total_first_year_extra: 15680,
     },
   },
+
   {
     id:         'gto-3s',
     symbol:     'GTO-3S',
@@ -612,13 +489,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       650,
       insurance_note:         'Hagerty classic; clean low-mile examples preferred',
       import_duty_pct:        0.025,
-      import_duty_est:        688,
       shipping_est:           4500,
       maintenance_annual:     1100,
       maintenance_note:       '6G72 timing belt, twin-turbo plumbing, complex AWD',
-      total_first_year_extra: 6938,
     },
   },
+
   {
     id:         '300zx-z32',
     symbol:     '300ZX-Z32',
@@ -640,13 +516,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       1200,
       insurance_note:         'Hagerty classic for clean US-spec; collector tier',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1500,
       maintenance_note:       'VG30DETT timing belt, twin-turbo refresh, intercooler hoses',
-      total_first_year_extra: 2700,
     },
   },
+
   {
     id:         'fc-rx7',
     symbol:     'FC-RX7',
@@ -669,13 +544,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       600,
       insurance_note:         'Hagerty classic; rotary surcharge on some carriers',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1500,
       maintenance_note:       'Rotary: apex seals, premix oil, vacuum hose hell',
-      total_first_year_extra: 2100,
     },
   },
+
   {
     id:         'mr2-sw20',
     symbol:     'MR2-SW20',
@@ -698,13 +572,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       650,
       insurance_note:         'Hagerty classic agreed-value',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1100,
       maintenance_note:       '3S-GTE service, mid-engine access, T-top seal refresh',
-      total_first_year_extra: 1750,
     },
   },
+
   {
     id:         's13-240sx',
     symbol:     'S13-240SX',
@@ -726,13 +599,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       600,
       insurance_note:         'Hagerty classic for unmodified; modified usually denied',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1000,
       maintenance_note:       'KA24DE timing chain, age rubber, hatch body rust',
-      total_first_year_extra: 1600,
     },
   },
+
   {
     id:         'celica-gt4',
     symbol:     'CELICA-GT4',
@@ -754,13 +626,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       700,
       insurance_note:         'Hagerty agreed-value rally heritage classic',
       import_duty_pct:        0.025,
-      import_duty_est:        404,
       shipping_est:           4500,
       maintenance_annual:     1100,
       maintenance_note:       '3S-GTE turbo, AWD service, water-to-air intercooler',
-      total_first_year_extra: 6704,
     },
   },
+
   {
     id:         'lancer-evo4',
     symbol:     'LANCER-EVO4',
@@ -782,17 +653,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       750,
       insurance_note:         'Hagerty agreed-value classic',
       import_duty_pct:        0.025,
-      import_duty_est:        400,
       shipping_est:           4500,
       maintenance_annual:     1300,
       maintenance_note:       '4G63T turbo, AYC fluid intervals, age-related parts hunt',
-      total_first_year_extra: 6950,
     },
   },
 
-  // ==========================================================
-  // EUROPEAN / EXOTIC
-  // ==========================================================
   {
     id:         '458-spec',
     symbol:     '458-SPEC',
@@ -815,13 +681,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       8000,
       insurance_note:         'Putnam Leasing/Chubb high-value; agreed-value collector',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     5000,
       maintenance_note:       'Ferrari Power7 covers most; major service ~$4-6K every 7 yrs',
-      total_first_year_extra: 13000,
     },
   },
+
   {
     id:         'gt3rs-991',
     symbol:     'GT3RS-991',
@@ -844,13 +709,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       5500,
       insurance_note:         'Chubb/Hagerty Drivers Club; track-day endorsement available',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     3500,
       maintenance_note:       'Porsche service every 10K mi. Track use raises consumables.',
-      total_first_year_extra: 9000,
     },
   },
+
   {
     id:         'aventador',
     symbol:     'AVENTADOR',
@@ -872,13 +736,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       9000,
       insurance_note:         'Chubb high-value; agreed-value, garage required',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     6000,
       maintenance_note:       'V12 service is engine-out at major intervals (~$15K every 5 yrs)',
-      total_first_year_extra: 15000,
     },
   },
+
   {
     id:         '720s',
     symbol:     '720S',
@@ -900,13 +763,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       6500,
       insurance_note:         'Chubb/PURE high-value; carbon tub raises stated value',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     4500,
       maintenance_note:       'McLaren dealer service. Hydraulic suspension components costly.',
-      total_first_year_extra: 11000,
     },
   },
+
   {
     id:         'cayman-gt4',
     symbol:     'CAYMAN-GT4',
@@ -929,13 +791,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       3500,
       insurance_note:         'Hagerty Drivers Club / standard performance carrier',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     2200,
       maintenance_note:       'Porsche minor every 10K, brakes wear faster on track use',
-      total_first_year_extra: 5700,
     },
   },
+
   {
     id:         'f8-trib',
     symbol:     'F8-TRIB',
@@ -958,13 +819,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       8000,
       insurance_note:         'Chubb/PURE high-value; agreed-value collector policy',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     5000,
       maintenance_note:       'Ferrari Power7 covers years 1-7. Major service ~$5K post-warranty.',
-      total_first_year_extra: 13000,
     },
   },
+
   {
     id:         'vantage-gt3',
     symbol:     'V12-VANTAGE',
@@ -986,13 +846,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       5000,
       insurance_note:         'Chubb high-value; specialty Aston coverage',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     3500,
       maintenance_note:       'Aston dealer or V12 specialist service; clutch and coil packs on older cars.',
-      total_first_year_extra: 8500,
     },
   },
+
   {
     id:         'mclaren-600lt',
     symbol:     'MCLAREN-600LT',
@@ -1014,13 +873,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       6000,
       insurance_note:         'Chubb/PURE high-value; carbon body raises stated value',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     4000,
       maintenance_note:       'McLaren dealer service; specialty fluids and brake refresh',
-      total_first_year_extra: 10000,
     },
   },
+
   {
     id:         'amg-gtr',
     symbol:     'AMG-GTR',
@@ -1042,13 +900,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       4500,
       insurance_note:         'Hagerty/Chubb high-performance; standard exotic tier',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     3000,
       maintenance_note:       'AMG service every 10K. Track use raises tire/brake spend.',
-      total_first_year_extra: 7500,
     },
   },
+
   {
     id:         'm4-csl',
     symbol:     'M4-CSL',
@@ -1070,17 +927,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       4000,
       insurance_note:         'Hagerty Drivers Club / specialty M coverage',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     2500,
       maintenance_note:       'BMW M service. Carbon roof and seats add detail cost.',
-      total_first_year_extra: 6500,
     },
   },
 
-  // ==========================================================
-  // AMERICAN MUSCLE
-  // ==========================================================
   {
     id:         'gt500-21',
     symbol:     'GT500-21',
@@ -1102,13 +954,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       3000,
       insurance_note:         'Standard performance carrier; low rate vs European exotics',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1500,
       maintenance_note:       'Ford dealer service. Predator engine reliability is strong.',
-      total_first_year_extra: 4500,
     },
   },
+
   {
     id:         'zl1-1le',
     symbol:     'ZL1-1LE',
@@ -1130,13 +981,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       2800,
       insurance_note:         'Standard performance; track endorsement raises rate',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     1500,
       maintenance_note:       'GM dealer; LT4 supercharged engine reliability strong',
-      total_first_year_extra: 4300,
     },
   },
+
   {
     id:         'viper-acr',
     symbol:     'VIPER-ACR',
@@ -1158,13 +1008,12 @@ var TICKER_UNIVERSE = [
       insurance_annual:       5000,
       insurance_note:         'Hagerty agreed-value; collector tier despite recency',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     2500,
       maintenance_note:       'OEM parts hard to source post-Conner Avenue. ACR aero parts pricey.',
-      total_first_year_extra: 7500,
     },
   },
+
   {
     id:         'corvette-z06',
     symbol:     'CORVETTE-Z06',
@@ -1186,12 +1035,9 @@ var TICKER_UNIVERSE = [
       insurance_annual:       3500,
       insurance_note:         'Standard performance carrier; agreed-value optional',
       import_duty_pct:        0,
-      import_duty_est:        0,
       shipping_est:           0,
       maintenance_annual:     2000,
       maintenance_note:       'Chevy dealer service. Flat-plane V8 oil and intake intervals.',
-      total_first_year_extra: 5500,
     },
   },
-
 ];

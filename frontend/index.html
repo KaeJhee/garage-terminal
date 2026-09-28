@@ -1409,9 +1409,8 @@ const fmtPct= n => (n>=0?'+':'')+Number(n).toFixed(2)+'%';
 
 // Derive import duty + total first-year extra LIVE from avg_price so they
 // never drift when prices update. import_duty_est = avg_price * duty_pct;
-// total = duty + the flat (price-independent) cost components. Stored
-// import_duty_est / total_first_year_extra in cars.config.js are ignored
-// for display — this is always the source of truth.
+// total = duty + the flat (price-independent) cost components.
+// cars.config.js does not store either value; this is the only source.
 function ctoDerived(car) {
   var cto = car.cost_to_own || {};
   var duty = Math.round((car.avg_price || 0) * (cto.import_duty_pct || 0));

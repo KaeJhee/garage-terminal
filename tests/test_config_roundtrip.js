@@ -9,16 +9,12 @@ const parse = text => new Function(text + ';return {CHART_COLORS, WATCHLIST, TIC
 const write = d => W.serializeConfig(d.CHART_COLORS, d.WATCHLIST, d.TICKER_UNIVERSE);
 const car = (extra) => Object.assign({ id: 't', symbol: 'T', avg_price: 100000, color: '#e8a020' }, extra);
 const one = c => parse(W.serializeConfig({ amber: '#e8a020' }, [c], [])).WATCHLIST[0];
-// Duty and first-year total are derived (the page recomputes them), so a hand-edited price or a car
-// added without them is not a loss. Compare everything else.
-const underived = d => { for (const c of [...d.WATCHLIST, ...d.TICKER_UNIVERSE]) if (c.cost_to_own) {
-  delete c.cost_to_own.import_duty_est; delete c.cost_to_own.total_first_year_extra; } return d; };
 
 const tests = {
   'unedited export parses back identical for every car'() {
     const orig = parse(fs.readFileSync(CONFIG, 'utf8'));
     const again = parse(write(orig));
-    assert.deepStrictEqual(underived(again), underived(parse(fs.readFileSync(CONFIG, 'utf8'))));
+    assert.deepStrictEqual(again, parse(fs.readFileSync(CONFIG, 'utf8')));
     assert.ok(orig.WATCHLIST.length + orig.TICKER_UNIVERSE.length > 0);
   },
   'writing twice gives the same bytes'() {
@@ -36,11 +32,12 @@ const tests = {
     const cto = { insurance_annual: 3200, import_duty_pct: 1, shipping_est: 5000, registration_est: 4500,
       registration_note: 'Customs broker + bond', import_note: 'Pure BEV', maintenance_annual: 3500 };
     const got = one(car({ avg_price: 78000, cost_to_own: cto })).cost_to_own;
-    assert.strictEqual(got.registration_note, 'Customs broker + bond');
-    assert.strictEqual(got.import_duty_est, 78000);
-    assert.strictEqual(got.total_first_year_extra, 78000 + 5000 + 4500 + 3200 + 3500);
-    // Halves round up, as the page does: 46500 x 0.025 = 1162.5
-    assert.strictEqual(one(car({ avg_price: 46500, cost_to_own: { import_duty_pct: 0.025 } })).cost_to_own.import_duty_est, 1163);
+    assert.deepStrictEqual(got, cto);
+  },
+  'duty and first-year total are never written, since the page derives them'() {
+    const got = one(car({ cost_to_own: { import_duty_pct: 0.025, import_duty_est: 2500, shipping_est: 4500, total_first_year_extra: 7000 } }));
+    assert.deepStrictEqual(got.cost_to_own, { import_duty_pct: 0.025, shipping_est: 4500 });
+    assert.ok(!('cost_to_own' in one(car({ cost_to_own: { import_duty_est: 1, total_first_year_extra: 2 } }))));
   },
   'notes with line breaks, quotes and backslashes survive'() {
     const note = 'line1\nline2 "q" it\'s \\ done\r';

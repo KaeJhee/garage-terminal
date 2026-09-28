@@ -76,7 +76,7 @@ Two ways, both end in committing `cars.config.js`:
 1. **Dashboard editor.** Click CONFIG, edit or add, Preview, Export, then commit the downloaded file.
 2. **Hand-edit `cars.config.js`** and commit.
 
-`import_duty_est` and `total_first_year_extra` are derived automatically from `avg_price` and `import_duty_pct`, so you never enter them. Full detail, including the Chinese-car manual price workflow, is in `HOW_TO_ADD_A_CAR.md`.
+Import duty and the first-year total are worked out by the page from `avg_price` and `import_duty_pct`, so the file stores neither. Full detail, including the Chinese-car manual price workflow, is in `HOW_TO_ADD_A_CAR.md`.
 
 ---
 

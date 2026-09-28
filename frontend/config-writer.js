@@ -7,10 +7,12 @@
   var CAR_ORDER = ['id', 'symbol', 'make', 'model', 'years', 'category', 'engine', 'power',
     'avg_price', 'low_price', 'high_price', 'prev_avg', 'color', 'note', 'bat_url',
     'bat_title_include', 'bat_title_exclude', 'market_url', 'scrape_extras'];
-  var CTO_ORDER = ['insurance_annual', 'insurance_note', 'import_duty_pct', 'import_duty_est',
+  var CTO_ORDER = ['insurance_annual', 'insurance_note', 'import_duty_pct',
     'shipping_est', 'registration_est', 'registration_note', 'import_note',
     'maintenance_annual', 'maintenance_note'];
   var RUNTIME = { delta: 1, delta_pct: 1, delta_dir: 1, _list: 1, __sessionOnly: 1 };
+  // Duty and first-year total are never written: the page derives them from avg_price (ctoDerived)
+  var DERIVED = { import_duty_est: 1, total_first_year_extra: 1 };
 
   function key(k) { return /^[A-Za-z_$][\w$]*$/.test(k) ? k : jsLit(k); }
 
@@ -38,16 +40,6 @@
       .concat(last && obj[last] !== undefined ? [last] : []);
   }
 
-  // Duty and first-year total are derived from avg_price; recomputed exactly as the page does.
-  function withDerived(cto, avg) {
-    var out = {}, duty = Math.round((avg || 0) * (cto.import_duty_pct || 0));
-    Object.keys(cto).forEach(function (k) { out[k] = cto[k]; });
-    out.import_duty_est = duty;
-    out.total_first_year_extra = duty + (cto.shipping_est || 0) + (cto.registration_est || 0) +
-      (cto.insurance_annual || 0) + (cto.maintenance_annual || 0);
-    return out;
-  }
-
   function serializeCar(c, colors) {
     var hex = {};
     Object.keys(colors || {}).forEach(function (k) { hex[colors[k]] = k; });
@@ -60,10 +52,11 @@
         v.forEach(function (x) { L.push('      ' + jsLit(x) + ','); });
         L.push('    ],');
       } else if (k === 'cost_to_own' && v && typeof v === 'object' && !Array.isArray(v)) {
-        if (!Object.keys(v).length) return;
-        var cto = withDerived(v, c.avg_price);
+        var cto = {};
+        Object.keys(v).forEach(function (ck) { if (!DERIVED[ck]) cto[ck] = v[ck]; });
+        if (!Object.keys(cto).length) return;
         L.push('    cost_to_own: {');
-        ordered(cto, CTO_ORDER, 'total_first_year_extra').forEach(function (ck) {
+        ordered(cto, CTO_ORDER).forEach(function (ck) {
           L.push('      ' + pad(ck, 24) + jsLit(cto[ck]) + ',');
         });
         L.push('    },');

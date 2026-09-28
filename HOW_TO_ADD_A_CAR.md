@@ -28,7 +28,7 @@ This is a static site with no backend, so the dashboard cannot write to its own 
 6. Click **Export cars.config.js** to download the file.
 7. Send the file to Code: "replace frontend/cars.config.js with this, run generate_history.py, then commit."
 
-The editor recomputes `import_duty_est` and `total_first_year_extra` for you on export, and writes colors back as `CHART_COLORS` references. You do not enter those by hand.
+The editor writes colors back as `CHART_COLORS` references. Import duty and the first-year total are not stored in the file; the page works them out from `avg_price`.
 
 ---
 
@@ -67,7 +67,6 @@ The editor recomputes `import_duty_est` and `total_first_year_extra` for you on 
     shipping_est:       0,
     maintenance_annual: 12000,
     maintenance_note:   'Carbon tub inspection, hybrid battery service',
-    // import_duty_est and total_first_year_extra are DERIVED. Do not set them.
     // registration_est and import_note are OPTIONAL (used for imports).
   },
 },
@@ -90,15 +89,15 @@ The editor recomputes `import_duty_est` and `total_first_year_extra` for you on 
 | `bat_title_include` | Optional. A listing counts only if its title contains one of these words, for a specific trim. Example: `['Turbo II', 'Turbo 2']`. |
 | `bat_title_exclude` | Optional. Listings whose title contains any of these words are skipped. Example: `['Speciale A', 'Aperta']`. Bring a Trailer often sends a search to a model page that also lists sibling versions (the `cayman gt4` search lands on a page with GT4 RS sales), so exclude those here. |
 | `market_url` | The dashboard's Market link. Not scraped. Example: `classic.com/m/mclaren/p1/`. |
-| `cost_to_own` | First-year ownership costs. See below. `import_duty_est` and `total_first_year_extra` are derived, not entered. |
+| `cost_to_own` | First-year ownership costs. See below. Import duty and the first-year total are worked out by the page, not stored. |
 
 ### Cost-to-own is self-computing
 
 You set `import_duty_pct` (for example `0.025` for a 2.5 percent rate, `0` for US-spec). The dashboard derives the rest live, every render:
 
 ```
-import_duty_est        = avg_price * import_duty_pct
-total_first_year_extra = import_duty_est + shipping_est + registration_est + insurance_annual + maintenance_annual
+import duty      = avg_price * import_duty_pct
+first-year total = import duty + shipping_est + registration_est + insurance_annual + maintenance_annual
 ```
 
 You never compute or update those two by hand. When a scraped price changes, the duty and total recompute themselves. Two optional fields apply to imports: `registration_est` (a flat registration or compliance cost) and `import_note` (a short line describing the import path). Leave them off for US-spec cars.
@@ -163,8 +162,6 @@ If no Bring a Trailer page shows a single sold result, `scrape_prices.py` stops 
 3. **Trailing comma after each car block.** A missing comma is a syntax error and the dashboard goes blank. Open the page, hit F12, read the console.
 4. **Use a realistic `avg_price`, not 0.** The chart and cost-to-own anchor on it.
 
-You no longer compute `total_first_year_extra`. It is derived.
-
 ---
 
 ## Local testing
@@ -202,6 +199,152 @@ scrape_extras: [
 ```
 
 `years`, `include`, and `exclude` work like the car's `years`, `bat_title_include`, and `bat_title_exclude`. Only `bat_search` entries are scraped; entries of any other type are kept in the config but logged as "no scraper" and never fetched.
+
+---
+
+## Notes moved from cars.config.js
+
+These notes used to sit inside `cars.config.js`. They moved here, word for word, so that an Export from the editor reproduces the file exactly. Some lines describe the older way of working (committing by hand, pasting a snippet, the April 2026 starting prices). Where they differ from the steps above, the steps above are current.
+
+### Field reference (the old file header)
+
+```text
+/**
+ * ============================================================
+ * GARAGE TERMINAL - CAR CONFIGURATION
+ * ============================================================
+ *
+ * SINGLE SOURCE OF TRUTH. The chart, ticker, watchlist, scraper,
+ * and price history all read from this file.
+ *
+ * EASIEST WAY TO EDIT: the dashboard CONFIG button (gear, top bar).
+ * Add/edit cars, Preview live, Export this file, commit it. The
+ * editor derives the duty fields and writes colors for you.
+ *
+ * BY HAND: copy a car block from WATCHLIST or TICKER_UNIVERSE,
+ * paste at the end of the array, change the fields, commit.
+ * Full guide: HOW_TO_ADD_A_CAR.md
+ *
+ * ============================================================
+ * FIELD REFERENCE
+ * ============================================================
+ *
+ * id          -> Unique slug, lowercase, hyphens only.
+ * symbol      -> Ticker label, uppercase, no spaces.
+ * make/model  -> Display info. model is the chart header.
+ * years       -> Production years, e.g. "1995-1998".
+ * category    -> JDM | Modern | Exotic | Muscle | European | Chinese
+ * engine/power-> Specs strip text.
+ * avg_price   -> Current market price USD (integer). Scraper
+ *                overwrites this weekly for US-market cars.
+ * low/high    -> Range ends for the price gauge.
+ * prev_avg    -> Prior value, drives the delta arrow.
+ * color       -> CHART_COLORS.<name> (see palette below).
+ * note        -> One-line market insight.
+ * bat_url     -> Bring a Trailer search URL (scraped).
+ * market_url  -> Market link on the dashboard (not scraped).
+ * cost_to_own -> First-year ownership costs:
+ *   insurance_annual, insurance_note,
+ *   import_duty_pct (0 for US-spec), shipping_est,
+ *   maintenance_annual, maintenance_note,
+ *   registration_est (OPTIONAL, imports),
+ *   import_note (OPTIONAL, imports).
+ *
+ * DERIVED, DO NOT SET: import_duty_est and total_first_year_extra
+ * are computed live from avg_price * import_duty_pct + flat costs.
+ *
+ * PRICING: only SOLD Bring a Trailer listings set the price, as the
+ * MEDIAN of the last two years, once there are 3 or more sales.
+ *
+ * ============================================================
+ * CHART COLORS
+ * ============================================================
+ */
+```
+
+### Chart color notes (beside the palette)
+
+```text
+  amber:   '#e8a020',   // R33 GTR (in use)
+  teal:    '#3cb8c0',   // R32 GTR (in use)
+  green:   '#3ab86e',   // Supra A80 (in use)
+  blue:    '#4b8ef5',   // R35 GTR (in use)
+  purple:  '#a06ef0',   // Huracan STO (in use)
+```
+
+### Watchlist notes
+
+```text
+/**
+ * ============================================================
+ * WATCHLIST - Cars shown in the sidebar and on the main chart
+ * ============================================================
+ */
+  // DREAM CAR
+  // JDM LEGENDS
+  // MODERN
+  // EXOTIC
+  // ADD NEW WATCHLIST CARS BELOW THIS LINE
+  // (User-promoted cars from the ticker are stored in localStorage
+  //  and merged at runtime. To make permanent, paste the snippet
+  //  produced by the "Move to Watchlist" copy button here.)
+```
+
+The watchlist labels grouped the cars as: DREAM CAR (r33-gtr), JDM LEGENDS (r32-gtr, supra-a80), MODERN (r35-gtr), EXOTIC (huracan-sto).
+
+### Chinese NEV import and tariff notes (above nio-es9, zeekr-9x and aito-m9)
+
+```text
+  // ============================================================
+  // CHINESE NEV FLAGSHIPS - grey-market import cost modeling
+  // ------------------------------------------------------------
+  // These are NOT US-legal. No FMVSS/EPA certification and they are
+  // brand new, so the 25-yr import exemption does not apply. Realistic
+  // routes are Show-or-Display (NHTSA, ~2,500 mi/yr cap, rarely granted)
+  // or off-road/private use only. Costs modeled as worst-case landed.
+  //
+  // TARIFF: Section 301 levies 100% on Chinese pure-BEVs (HTS 8703.80)
+  // on top of the 2.5% MFN auto duty. Plug-in hybrids and EREVs fall
+  // under different HTS codes that carry the 25% Section 301 rate, not
+  // the 100%, so the PHEV/EREV cars below model ~37.5% effective.
+  // Rates current as of mid-2026; adjust import_duty_pct if policy moves.
+  // avg_price = China market value converted to USD (the car itself).
+  // ============================================================
+```
+
+### Ticker notes
+
+```text
+/**
+ * ============================================================
+ * TICKER UNIVERSE - Cars in the scrolling ticker
+ * ============================================================
+ *
+ * Every ticker entry uses the FULL watchlist schema. Click any
+ * ticker symbol on the dashboard to open its detail panel with
+ * a 90-day sparkline, listing links, and a "Move to Watchlist"
+ * button that promotes the car to the main chart.
+ *
+ * Prices are estimates based on April 2026 market references
+ * (Classic.com averages, BaT auction medians, KBB/Edmunds where
+ * applicable). Update them when refreshing watchlist data.
+ *
+ * Maintenance/insurance estimates assume a clean, drivable
+ * example with specialty insurance for classics (Hagerty/Grundy)
+ * or full-coverage for moderns (TheZebra/CarEdge baseline).
+ */
+  // ==========================================================
+  // JDM ICONS
+  // ==========================================================
+  // ==========================================================
+  // EUROPEAN / EXOTIC
+  // ==========================================================
+  // ==========================================================
+  // AMERICAN MUSCLE
+  // ==========================================================
+```
+
+The ticker labels grouped the cars as: JDM ICONS (nsx-na1 to lancer-evo4), EUROPEAN / EXOTIC (458-spec to m4-csl), AMERICAN MUSCLE (gt500-21 to corvette-z06).
 
 ---
 

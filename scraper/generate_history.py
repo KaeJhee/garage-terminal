@@ -9,8 +9,9 @@ Weekly step after scrape_prices.py:
      end. Stored rows are removed only when the car's model-year or title
      rules now reject them, or when they are old blended backfill rows on a day
      the scrape saw in full. An 'unsold' card never removes a stored sale.
-  2. Patch avg_price, prev_avg and the duty fields in cars.config.js for cars
-     with enough recent sales ("scraped").
+  2. Patch avg_price and prev_avg in cars.config.js for cars with enough
+     recent sales ("scraped"). The page derives import duty and the
+     first-year total from avg_price, so the config stores neither.
   3. Write frontend/data.js from the patched prices and the store:
        BAKED_HISTORY[id] = daily ESTIMATE line: a deterministic 365-day
                            mean-reverting path that ends at the tracked price
@@ -34,7 +35,7 @@ With no scraped_prices.json, or with --dev, only data.js is rewritten;
 price_history.json and cars.config.js are left untouched.
 """
 
-import argparse, hashlib, json, math, os, random, re, statistics
+import argparse, hashlib, json, os, random, re, statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -246,15 +247,10 @@ def audit_anchors(cfg, history):
         print("\nAnchor audit: all avg_price anchors look consistent.")
 
 # ---------------------------------------------------------------------------
-# Config patch (price + duty recompute)
+# Config patch (avg_price and prev_avg only)
 # ---------------------------------------------------------------------------
 
-def js_round(x):
-    """Round halves up, as the page and the config editor do (JS Math.round). Python's round() rounds halves to even."""
-    r = math.floor(x)
-    return int(r + 1 if x - r >= 0.5 else r)
-
-def patch_config_prices(config_text, price_data, meta):
+def patch_config_prices(config_text, price_data):
     updated=config_text
     for cid,result in price_data.items():
         if result.get("confidence")!="scraped": 
@@ -276,16 +272,10 @@ def patch_config_prices(config_text, price_data, meta):
         if new_avg==old_avg:
             # Unchanged price: leave prev_avg alone so the change arrow keeps the last real move
             print(f"  ==  {cid}: unchanged at ${new_avg:,}"); continue
-        m=meta.get(cid,{}); pct=m.get("import_duty_pct",0)
-        nd=js_round(new_avg*pct)
-        nt=nd+m.get("shipping_est",0)+m.get("registration_est",0)+m.get("insurance_annual",0)+m.get("maintenance_annual",0)
         nb=re.sub(r"(avg_price:\s*)\d+",rf"\g<1>{new_avg}",block,count=1)
         nb=re.sub(r"(prev_avg:\s*)\d+",rf"\g<1>{old_avg}",nb,count=1)
-        if pct>0:
-            nb=re.sub(r"(import_duty_est:\s*)\d+",rf"\g<1>{nd}",nb,count=1)
-            nb=re.sub(r"(total_first_year_extra:\s*)\d+",rf"\g<1>{nt}",nb,count=1)
         updated=updated[:bs]+nb+updated[be:]
-        print(f"  OK  {cid}: avg {old_avg:,}->{new_avg:,} duty->{nd:,}")
+        print(f"  OK  {cid}: avg {old_avg:,}->{new_avg:,}")
     return updated
 
 # ---------------------------------------------------------------------------
@@ -337,8 +327,8 @@ def run_generate(dev_mode):
     real=sum(len([s for s in e["sales"] if s.get("venue") not in NOT_SALES]) for e in history.values())
     print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")
 
-    print("Patching cars.config.js (price + duty recompute)...")
-    write_atomic(CONFIG_JS_PATH, patch_config_prices(CONFIG_JS_PATH.read_text(),price_data,meta))
+    print("Patching cars.config.js (avg_price and prev_avg)...")
+    write_atomic(CONFIG_JS_PATH, patch_config_prices(CONFIG_JS_PATH.read_text(),price_data))
     print("OK  Updated cars.config.js")
     build_data_js(history,today,load_cars_from_config())   # re-read so each line ends at the patched price
     print("Done.")
