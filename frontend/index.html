@@ -1354,9 +1354,10 @@ canvas { display: block; }
 
 // Merge user-promoted cars from localStorage into WATCHLIST BEFORE
 // computing deltas. cars.config.js takes precedence on id collision.
+var USER_WATCHLIST_KEY = 'garage_terminal_user_watchlist';
 (function loadUserWatchlist() {
   try {
-    var raw = localStorage.getItem('garage_terminal_user_watchlist');
+    var raw = localStorage.getItem(USER_WATCHLIST_KEY);
     if (!raw) return;
     var userCars = JSON.parse(raw);
     if (!Array.isArray(userCars)) return;
@@ -1431,7 +1432,7 @@ function ctoDerived(car) {
 // ============================================================
 // STATE
 // ============================================================
-let activeId = 'r33-gtr';
+let activeId = (WATCHLIST[0]||{}).id;   // the first watchlist car opens first
 let activePeriod = '1Y';
 let chart = null;
 let currentTickerFilter = '';
@@ -1983,7 +1984,6 @@ function renderPortfolio() {
 // Currently-active modal car id (set when modal opens)
 var activeModalCarId = null;
 var sparklineChart   = null;
-var USER_WATCHLIST_KEY = 'garage_terminal_user_watchlist';
 
 // Find a car by id across WATCHLIST and TICKER_UNIVERSE
 function findCarById(id) {
@@ -2440,6 +2440,9 @@ function showCarForm(c) {
   var cto = c.cost_to_own || {};
   var colorKeys = Object.keys(CHART_COLORS);
   var colorKey = cfgHexToKey()[c.color] || colorKeys[0];
+  // Keep a category the editor list lacks (a hand-edited 'Hypercar'), so Save does not switch it to JDM
+  var categories = CFG_CATEGORIES.slice();
+  CFG_EDIT.list.concat([c]).forEach(function(x){ if (x.category && categories.indexOf(x.category)<0) categories.push(x.category); });
   var h = '<div class="cfg-form-grid">'
     + cfgField('id (slug)','f_id',c.id,'text')
     + cfgField('symbol','f_symbol',c.symbol,'text')
@@ -2447,7 +2450,7 @@ function showCarForm(c) {
     + cfgField('make','f_make',c.make,'text')
     + cfgField('model','f_model',c.model,'text')
     + cfgField('years','f_years',c.years,'text')
-    + cfgField('category','f_category',c.category||'JDM','select',CFG_CATEGORIES)
+    + cfgField('category','f_category',c.category||'JDM','select',categories)
     + cfgField('color','f_color',colorKey,'select',colorKeys)
     + cfgField('engine','f_engine',c.engine,'text')
     + cfgField('power','f_power',c.power,'text')
@@ -2604,7 +2607,7 @@ renderComp();
 wireTickerSearch();
 // Defer selectCar so canvas layout is calculated before Chart.js renders
 requestAnimationFrame(function() {
-  selectCar('r33-gtr');
+  selectCar((WATCHLIST[0]||{}).id);
 });
 </script>
 <!-- CONFIG EDITOR MODAL -->
