@@ -158,6 +158,39 @@ def test_undated_sold_figures_are_reference_only():
     assert sorted(x["reason"] for x in r["rejected"]) == ["model year", "unsold"]
 
 
+def test_title_filters():
+    page = "".join([
+        card(301, "2015 Ferrari 458 Speciale", "Sold for USD $650,000 <span>on 7/3/2025</span>"),
+        card(302, "2015 Ferrari 458 Speciale A", "Sold for USD $2,125,000 <span>on 7/22/2026</span>"),
+        card(303, "1987 Mazda RX-7 Turbo II 5-Speed", "Sold for USD $22,250 <span>on 8/5/2025</span>"),
+        card(304, "1989 Mazda RX-7 Convertible", "Sold for USD $6,169 <span>on 5/24/2025</span>"),
+    ])
+    assert [x["listing_id"] for x in sp.scrape_bat_search(page, exclude=["Speciale A", "Aperta"])] == ["301", "303", "304"]
+    assert sorted((r["listing_id"], r["reason"]) for r in sp._SCRAPE_STATS["bat_rejects"]) == [("302", "title filter")]
+    assert [x["listing_id"] for x in sp.scrape_bat_search(page, include=["Turbo II", "Turbo 2"])] == ["303"]
+
+
+def test_rejected_listing_already_stored_is_removed():
+    h = {"car": {"sales": [{"date": "2026-07-22", "price": 2125000, "venue": "bat", "listing_id": "302", "title": "2015 Ferrari 458 Speciale A"},
+                           {"date": "2025-07-03", "price": 650000, "venue": "bat", "listing_id": "301", "title": "2015 Ferrari 458 Speciale"}]}}
+    rejected = [{"listing_id": "302", "price": 2125000, "date": "2026-07-22", "reason": "title filter"}]
+    assert gh.reconcile_days(h, "car", [], rejected) == 1
+    assert [x["listing_id"] for x in h["car"]["sales"]] == ["301"]
+
+
+def test_car_rules_apply_to_stored_listings():
+    h = {"fc": {"sales": [
+        {"date": "2025-08-05", "price": 22250, "venue": "bat", "listing_id": "303", "title": "1987 Mazda RX-7 Turbo II 5-Speed"},
+        {"date": "2025-05-24", "price": 6169, "venue": "bat", "listing_id": "304", "title": "1989 Mazda RX-7 Convertible"},
+        {"date": "2024-01-01", "price": 15000, "venue": "bat-backfill"},                     # no title: can't judge, kept
+        {"date": "2023-06-01", "price": 9000, "venue": "bat", "listing_id": "305", "title": "1979 Mazda RX-7 Turbo II"},
+    ]}}
+    rules = {"years": "1985-1991", "title_include": ["Turbo II", "Turbo 2"], "title_exclude": None}
+    assert gh.enforce_car_rules(h, "fc", rules) == 2
+    assert sorted(x.get("listing_id", "-") for x in h["fc"]["sales"]) == ["-", "303"]
+    assert gh.enforce_car_rules(h, "fc", {"years": "2022"}) == 0                          # no rules in effect
+
+
 def test_carsandbids_counts_once():
     page = '<div class="auction-result">Sold for $45,000</div>'
     assert sp.scrape_carsandbids(page) == [45000]

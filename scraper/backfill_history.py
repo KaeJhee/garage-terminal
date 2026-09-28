@@ -64,7 +64,7 @@ def load_cars():
         const code=fs.readFileSync(process.argv[1],'utf-8');
         const fn=new Function(code+'; return {WATCHLIST,TICKER_UNIVERSE};');
         const d=fn(); const all=[...d.WATCHLIST,...d.TICKER_UNIVERSE]; const out=[];
-        all.forEach(c=>{ if(c.id) out.push({id:c.id,label:(c.make||'')+' '+(c.model||''),bat_url:c.bat_url||'',years:c.years||null}); });
+        all.forEach(c=>{ if(c.id) out.push({id:c.id,label:(c.make||'')+' '+(c.model||''),bat_url:c.bat_url||'',years:c.years||null,include:c.bat_title_include||null,exclude:c.bat_title_exclude||null}); });
         process.stdout.write(JSON.stringify(out));
     """
     r = subprocess.run(["node","-e",js,str(CONFIG_JS_PATH)],
@@ -85,7 +85,7 @@ MONTHS = {m: i for i, m in enumerate(
     ["january","february","march","april","may","june","july","august",
      "september","october","november","december"], 1)}
 
-def parse_bat_sold(html: str, years=None) -> list:
+def parse_bat_sold(html: str, years=None, include=None, exclude=None) -> list:
     """
     Extract real sold listings as [{date: ISO, price: int}] from a BaT
     completed-auction page. Defensive: tries structured listing cards first,
@@ -103,9 +103,8 @@ def parse_bat_sold(html: str, years=None) -> list:
             span = scrape_prices.parse_years(years)
             keep = set()
             for c in cards:
-                y = scrape_prices.title_year(c["title"])
-                if c["sold"] and c["price"] and c["date"] and MIN_PRICE <= c["price"] <= MAX_PRICE \
-                        and not (span and y and not (span[0] <= y <= span[1])):
+                if c["price"] and c["date"] and MIN_PRICE <= c["price"] <= MAX_PRICE \
+                        and scrape_prices.card_verdict(c, span, include, exclude) is None:
                     keep.add((c["date"], c["price"]))
             return [{"date": d, "price": p} for d, p in sorted(keep)]
     sales = []
@@ -221,7 +220,7 @@ def run(only_car=None, dry_run=False):
                 continue
             print(f"\n[{c['id']}] {c['label']}\n    GET {c['bat_url'][:70]}")
             html = fetch(client, c["bat_url"])
-            sales = parse_bat_sold(html, c.get("years"))
+            sales = parse_bat_sold(html, c.get("years"), c.get("include"), c.get("exclude"))
             print(f"    parsed {len(sales)} real sold listings")
             if sales and not dry_run:
                 added = merge_sales(history, c["id"], sales)

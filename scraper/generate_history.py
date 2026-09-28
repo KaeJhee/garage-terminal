@@ -65,7 +65,8 @@ def load_cars_from_config() -> dict:
         all.forEach(c=>{ if(!c.id) return; const cto=c.cost_to_own||{};
           out[c.id]={avg_price:c.avg_price||0,low_price:c.low_price||0,high_price:c.high_price||0,import_duty_pct:cto.import_duty_pct||0,
             shipping_est:cto.shipping_est||0,registration_est:cto.registration_est||0,
-            insurance_annual:cto.insurance_annual||0,maintenance_annual:cto.maintenance_annual||0}; });
+            insurance_annual:cto.insurance_annual||0,maintenance_annual:cto.maintenance_annual||0,
+            years:c.years||null,title_include:c.bat_title_include||null,title_exclude:c.bat_title_exclude||null}; });
         process.stdout.write(JSON.stringify(out));
     """
     try:
@@ -163,21 +164,46 @@ def reconcile_days(history, car_id, sales, rejected):
     archive backfill wrote one blended row per day, mixing in unsold 'Bid to'
     results, other model years, and page-level duplicates, so any backfill row
     on a covered day whose price matches none of that day's sold listings is
-    not a sale and is removed. Days the scraper did not see are left alone."""
+    not a sale and is removed. Days the scraper did not see are left alone.
+    A stored listing the scraper now rejects (for example after a title filter
+    was added) is removed too."""
     entry = history.get(car_id)
     if not entry:
         return 0
     covered = {s["date"] for s in sales if s.get("date")} | {r["date"] for r in rejected if r.get("date")}
     if not covered:
         return 0
+    dropped_ids = {r["listing_id"] for r in rejected if r.get("listing_id")}
     real = {}
     for x in entry["sales"]:
-        if x.get("listing_id"):
+        if x.get("listing_id") and x["listing_id"] not in dropped_ids:
             real.setdefault(x["date"], set()).add(round(float(x["price"])))
     before = len(entry["sales"])
     entry["sales"] = [x for x in entry["sales"]
-                      if x.get("listing_id") or "backfill" not in x.get("venue", "") or x["date"] not in covered
-                      or round(float(x["price"])) in real.get(x["date"], set())]
+                      if (x.get("listing_id") and x["listing_id"] not in dropped_ids)
+                      or (not x.get("listing_id") and ("backfill" not in x.get("venue", "") or x["date"] not in covered
+                                                       or round(float(x["price"])) in real.get(x["date"], set())))]
+    return before - len(entry["sales"])
+
+def enforce_car_rules(history, car_id, rules):
+    """Apply the car's current model-year and title rules to its stored,
+    listing-tracked sales, so a rule added later (or a new search URL that no
+    longer shows the old listings) still clears sales of the wrong trim."""
+    try:
+        import scrape_prices as sp
+    except (ImportError, SystemExit):
+        return 0   # scraper deps missing: nothing to judge titles with
+    entry = history.get(car_id)
+    if not entry or not rules:
+        return 0
+    span = sp.parse_years(rules.get("years"))
+    inc, exc = rules.get("title_include"), rules.get("title_exclude")
+    if not (span or inc or exc):
+        return 0
+    before = len(entry["sales"])
+    entry["sales"] = [x for x in entry["sales"]
+                      if not (x.get("listing_id") and x.get("title")
+                              and sp.card_verdict({"sold": True, "title": x["title"]}, span, inc, exc))]
     return before - len(entry["sales"])
 
 def drop_legacy_bat_search(history):
@@ -353,7 +379,7 @@ def run_generate(dev_mode):
             n=add_listing_sales(history,cid,obs.get("sales",[]),today_iso)
             if n: print(f"  +{n} new sale(s) for {cid}")
             gone=reconcile_days(history,cid,obs.get("sales",[]),obs.get("rejected",[]))
-            if gone: print(f"  -{gone} backfill entr{'y' if gone==1 else 'ies'} for {cid} matched no sold listing on a day the scrape covered")
+            if gone: print(f"  -{gone} stored entr{'y' if gone==1 else 'ies'} for {cid} removed: no matching sold listing on a covered day, or a listing now rejected")
         elif obs["confidence"]=="scraped" and obs["sold_prices"]:
             add_real_sales(history,cid,obs["sold_prices"],obs["venues"],today_iso)
         elif obs["price"]:
@@ -362,6 +388,9 @@ def run_generate(dev_mode):
             has_user_manual = any(s.get("venue")=="manual" for s in entry.get("sales",[]))
             if not has_user_manual:
                 record_manual(history,cid,obs["price"],today_iso)
+    for cid,rules in meta.items():
+        off=enforce_car_rules(history,cid,rules)
+        if off: print(f"  -{off} stored sale(s) for {cid} fail its model-year or title rules")
     PRICE_HISTORY_PATH.write_text(json.dumps(history,separators=(",",":")))
     real=sum(len([s for s in e["sales"] if s.get("venue") not in ("manual","manual-auto")]) for e in history.values())
     print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")

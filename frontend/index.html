@@ -1356,7 +1356,10 @@ canvas { display: block; }
     userCars.forEach(function(uc) {
       if (!uc || !uc.id) return;
       if (!WATCHLIST.find(function(c) { return c.id === uc.id; })) {
-        WATCHLIST.push(uc);
+        // A promoted ticker car keeps following cars.config.js; the stored copy only fills gaps
+        // (and stands alone for a custom car that isn't in the config)
+        var fresh = TICKER_UNIVERSE.find(function(t) { return t.id === uc.id; });
+        WATCHLIST.push(fresh ? Object.assign({}, uc, fresh) : uc);
       }
     });
   } catch(e) {
@@ -2347,6 +2350,8 @@ function copyCarConfig() {
     '    color:      ' + JSON.stringify(car.color) + ',\n' +
     '    note:       ' + JSON.stringify(car.note || '') + ',\n' +
     '    bat_url:    ' + JSON.stringify(car.bat_url || '') + ',\n' +
+    (car.bat_title_include && car.bat_title_include.length ? '    bat_title_include: ' + JSON.stringify(car.bat_title_include) + ',\n' : '') +
+    (car.bat_title_exclude && car.bat_title_exclude.length ? '    bat_title_exclude: ' + JSON.stringify(car.bat_title_exclude) + ',\n' : '') +
     '    market_url: ' + JSON.stringify(car.market_url || '') + ',\n' +
     '    cost_to_own: {\n' +
     '      insurance_annual:       ' + (cto.insurance_annual || 0) + ',\n' +
@@ -2526,6 +2531,10 @@ function saveConfigCar() {
     cost_to_own: cto, _list: gv('f_list')||'ticker',
   };
   var idx = CFG_EDIT.list.findIndex(function(c){return c.id===(CFG_EDIT.editingId||id);});
+  // Scraper-only fields have no form input; keep them from the entry being edited
+  if (idx>=0) ['bat_title_include','bat_title_exclude'].forEach(function(k){
+    if (CFG_EDIT.list[idx][k]) car[k] = CFG_EDIT.list[idx][k];
+  });
   if (idx>=0) CFG_EDIT.list[idx] = car; else CFG_EDIT.list.push(car);
   CFG_EDIT.editingId = null;
   renderConfigList();
@@ -2601,6 +2610,8 @@ function serializeCar(c) {
   L.push('    color: '+colorExpr+',');
   if (c.note) L.push('    note: '+jsStr(c.note)+',');
   if (c.bat_url) L.push('    bat_url: '+jsStr(c.bat_url)+',');
+  if (c.bat_title_include && c.bat_title_include.length) L.push('    bat_title_include: ['+c.bat_title_include.map(jsStr).join(', ')+'],');
+  if (c.bat_title_exclude && c.bat_title_exclude.length) L.push('    bat_title_exclude: ['+c.bat_title_exclude.map(jsStr).join(', ')+'],');
   if (c.market_url) L.push('    market_url: '+jsStr(c.market_url)+',');
   if (c.cost_to_own && Object.keys(c.cost_to_own).length) L.push(serializeCto(c.cost_to_own, c.avg_price));
   L.push('  },');

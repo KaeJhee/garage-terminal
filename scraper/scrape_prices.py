@@ -116,6 +116,8 @@ def load_cars_from_config() -> list[dict]:
             market_url: c.market_url || null,
             avg_price:  c.avg_price || 0,
             years:      c.years || null,
+            title_include: c.bat_title_include || null,
+            title_exclude: c.bat_title_exclude || null,
             extras:     c.scrape_extras || [],
         }));
         process.stdout.write(JSON.stringify(out));
@@ -156,6 +158,8 @@ def load_cars_from_config() -> list[dict]:
                 "url":         car["bat_url"],
                 "search_term": car["label"],
                 "years":       car.get("years"),
+                "include":     car.get("title_include"),
+                "exclude":     car.get("title_exclude"),
                 "note":        "auto: bat_url",
             })
         # Cars & Bids: build a completed-auction search URL from the label.
@@ -304,10 +308,28 @@ def parse_bat_cards(html: str) -> list:
     return cards
 
 
-def scrape_bat_search(html: str, search_term: str = "", years=None, **_) -> list:
+def card_verdict(card, span, include=None, exclude=None):
+    """Why a listing card doesn't count as a sale for this car, or None if it does.
+    include: the title must contain one of these (a trim, e.g. 'Turbo II').
+    exclude: skip titles containing any of these (e.g. 'Aperta')."""
+    if not card["sold"]:
+        return "unsold"
+    y = title_year(card["title"])
+    if span and y and not (span[0] <= y <= span[1]):
+        return "model year"
+    t = (card["title"] or "").lower()
+    if include and not any(k.lower() in t for k in include):
+        return "title filter"
+    if exclude and any(k.lower() in t for k in exclude):
+        return "title filter"
+    return None
+
+
+def scrape_bat_search(html: str, search_term: str = "", years=None, include=None, exclude=None, **_) -> list:
     """Real BaT sales for this car: one dict per SOLD listing, keyed by its
-    listing ID, dated to the auction end. Unsold auctions ('Bid to') and
-    listings outside the car's model years are skipped."""
+    listing ID, dated to the auction end. Unsold auctions ('Bid to'), listings
+    outside the car's model years, and titles failing the car's include or
+    exclude words are skipped and reported as rejects."""
     if not html:
         return []
     span = parse_years(years)
@@ -315,12 +337,10 @@ def scrape_bat_search(html: str, search_term: str = "", years=None, **_) -> list
     for c in parse_bat_cards(html):
         if not c["price"] or not (5000 <= c["price"] <= 3_000_000):
             continue
-        y = title_year(c["title"])
-        wrong_year = bool(span and y and not (span[0] <= y <= span[1]))
-        if not c["sold"] or wrong_year:
+        why = card_verdict(c, span, include, exclude)
+        if why:
             if c["date"]:
-                rejects.append({"price": c["price"], "date": c["date"],
-                                "reason": "unsold" if not c["sold"] else "model year"})
+                rejects.append({"listing_id": c["listing_id"], "price": c["price"], "date": c["date"], "reason": why})
             continue
         sales.append({"listing_id": c["listing_id"], "url": c["url"], "title": c["title"],
                       "price": c["price"], "date": c["date"], "venue": "bat"})
