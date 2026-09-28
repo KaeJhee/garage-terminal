@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -15,6 +16,19 @@ import scrape_prices as sp        # noqa: E402
 import generate_history as gh     # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"   # trimmed copies of real BaT pages
+# A 3-car config and its store, so no check depends on the real cars.config.js or price_history.json
+FIXTURE_CONFIG = FIXTURES / "fixture_config.js"
+FIXTURE_STORE = FIXTURES / "fixture_price_history.json"
+
+
+@contextlib.contextmanager
+def fixture_config():
+    """Point both scripts' config loader at FIXTURE_CONFIG."""
+    saved, sp.CONFIG_PATH = sp.CONFIG_PATH, FIXTURE_CONFIG
+    try:
+        yield
+    finally:
+        sp.CONFIG_PATH = saved
 
 
 def card(lid, title, result, ts=""):
@@ -349,10 +363,10 @@ def test_phase1_exported_extras_reach_the_scraper():
              "exclude": ["Wheels", "Seats"]}
     js = ("const W=require(process.argv[1]);const fs=require('fs');"
           "const d=new Function(fs.readFileSync(process.argv[2],'utf8')+';return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE}')();"
-          "const c=[...d.WATCHLIST,...d.TICKER_UNIVERSE].find(c=>c.id==='r35-gtr');c.scrape_extras=[JSON.parse(process.argv[3])];"
+          "const c=[...d.WATCHLIST,...d.TICKER_UNIVERSE].find(c=>c.id==='fx-na1');c.scrape_extras=[JSON.parse(process.argv[3])];"
           "process.stdout.write(W.serializeConfig(d.CHART_COLORS,d.WATCHLIST,d.TICKER_UNIVERSE));")
     exported = subprocess.run(["node", "-e", js, str(root / "frontend" / "config-writer.js"),
-                               str(root / "frontend" / "cars.config.js"), json.dumps(extra)],
+                               str(FIXTURE_CONFIG), json.dumps(extra)],
                               capture_output=True, text=True, check=True).stdout
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "cars.config.js"
@@ -362,7 +376,7 @@ def test_phase1_exported_extras_reach_the_scraper():
             cars = {c["id"]: c for c in sp.load_cars_from_config()}
         finally:
             sp.CONFIG_PATH = saved
-    src = [s for s in cars["r35-gtr"]["sources"] if s.get("note") == "extra"]
+    src = [s for s in cars["fx-na1"]["sources"] if s.get("note") == "extra"]
     assert src == [{"type": "bat_search", "url": extra["url"], "note": "extra", "years": "2009-2024",
                     "exclude": ["Wheels", "Seats"]}], src
     kw = {k: v for k, v in src[0].items() if k not in ("type", "url", "note")}
@@ -373,21 +387,25 @@ def test_phase1_exported_extras_reach_the_scraper():
 def test_generator_loader_matches_the_scraper_config():
     if not shutil.which("node"):
         print("  (skipped: node not installed)"); return
-    cfg = gh.load_cars_from_config()
-    assert len(cfg) == 37 and set(next(iter(cfg.values()))) == set(gh.CONFIG_FIELDS)
-    evo = cfg["evo-vi"]
-    assert evo["title_include"] == ["Makinen", "Mäkinen", "TME"] and evo["years"] == "1999-2001"
-    assert evo["import_duty_pct"] == 0.025 and evo["low_price"] > 0 and evo["high_price"] > evo["low_price"]
+    # The real config, whatever cars it holds: both scripts see the same cars in the same order
+    assert list(gh.load_cars_from_config()) == [c["id"] for c in sp.load_cars_from_config() if c["id"]]
+    with fixture_config():
+        cfg = gh.load_cars_from_config()
+    assert list(cfg) == ["fx-r32", "fx-gt4", "fx-na1"] and all(set(v) == set(gh.CONFIG_FIELDS) for v in cfg.values())
+    r32 = cfg["fx-r32"]
+    assert r32["title_include"] == ["GT-R"] and r32["years"] == "1989-1994" and r32["import_duty_pct"] == 0.025
+    assert (r32["low_price"], r32["high_price"], r32["shipping_est"], r32["title_exclude"]) == (30000, 80000, 4500, None)
+    assert cfg["fx-gt4"]["title_exclude"] == ["GT4 RS"]
 
 
 @contextlib.contextmanager
 def generator_sandbox(scraped=None):
-    """A temp copy of the frontend files with generate_history's paths pointed at it."""
-    root = Path(__file__).resolve().parent.parent
+    """A temp dir holding the fixture config and store, with generate_history's paths pointed at it."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        for name in ("cars.config.js", "price_history.json", "data.js"):
-            shutil.copy(root / "frontend" / name, tmp / name)
+        shutil.copy(FIXTURE_CONFIG, tmp / "cars.config.js")
+        shutil.copy(FIXTURE_STORE, tmp / "price_history.json")
+        (tmp / "data.js").write_text("")
         if scraped is not None:
             (tmp / "scraped_prices.json").write_text(json.dumps(scraped))
         names = ("SCRAPED_PATH", "PRICE_HISTORY_PATH", "DATA_JS_PATH", "CONFIG_JS_PATH")
@@ -419,17 +437,76 @@ def test_without_a_scrape_only_data_js_is_written():
 def test_no_new_placeholder_rows_and_stored_rows_kept():
     if not shutil.which("node"):
         print("  (skipped: node not installed)"); return
-    store = json.loads((Path(__file__).resolve().parent.parent / "frontend" / "price_history.json").read_text())
-    sold = next(x for x in store["r32-gtr"]["sales"] if x.get("listing_id"))
+    store = json.loads(FIXTURE_STORE.read_text())
+    sold = next(x for x in store["fx-r32"]["sales"] if x.get("listing_id"))
     # A fallback car (the old code added a 'manual-auto' row for it) and a stored sale now showing as unsold
-    scraped = {"prices": {"nsx-na1": {"avg_price": 95000, "confidence": "fallback", "sales": [], "rejected": []},
-                          "r32-gtr": {"avg_price": 46000, "confidence": "thin", "sales": [], "rejected": [
+    scraped = {"prices": {"fx-na1": {"avg_price": 95000, "confidence": "fallback", "sales": [], "rejected": []},
+                          "fx-r32": {"avg_price": 46000, "confidence": "thin", "sales": [], "rejected": [
                               {"listing_id": sold["listing_id"], "price": sold["price"], "date": sold["date"], "reason": "unsold"}]}}}
     with generator_sandbox(scraped) as tmp:
         gh.run_generate(False)
         after = json.loads((tmp / "price_history.json").read_text())
         assert sorted(p.name for p in tmp.iterdir()) == ["cars.config.js", "data.js", "price_history.json", "scraped_prices.json"]
-    assert after == store                                                    # nothing added, nothing removed
+    for cid in scraped["prices"]:
+        assert after[cid] == store[cid], cid                                 # nothing added, nothing removed
+    manual = lambda h: sum(1 for e in h.values() for x in e["sales"] if x["venue"] == "manual-auto")
+    assert manual(after) == manual(store)
+
+
+def test_model_page_sibling_variant_follows_the_car_title_filter():
+    # 'cayman gt4' lands on /porsche/cayman-gt4/, whose auctions include the GT4 RS. Without the car's
+    # bat_title_exclude the 3 RS sales made the median $171,500; the GT4 alone is $134,000.
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    search = "https://bringatrailer.com/search/?s=cayman+gt4"
+    model = "https://bringatrailer.com/porsche/cayman-gt4/"
+    page = (FIXTURES / "bat_model_cayman_gt4.html").read_text()
+    with fixture_config():
+        car = next(c for c in sp.load_cars_from_config() if c["id"] == "fx-gt4")
+        rules = gh.load_cars_from_config()["fx-gt4"]
+    today = date(2026, 9, 28)
+    with fake_bat({search: (200, model, page)}):
+        r = sp.scrape_car(None, car)
+    assert sp.decide_price(r["sales"], car["fallback_avg"], today)[:2] == (134000, "scraped")
+    assert len(r["sales"]) == 5 and not any("GT4 RS" in s["title"] for s in r["sales"])
+    src = r["sources"][0]
+    assert (src["kind"], src["cards"], src["items"], src["counted"]) == ("model", 0, 9, 5)
+    assert src["rejects"] == {"unsold": 1, "model year": 0, "title filter": 3, "implausible": 0}
+    unfiltered = dict(car, sources=[dict(car["sources"][0], exclude=None)])
+    with fake_bat({search: (200, model, page)}):
+        assert sp.decide_price(sp.scrape_car(None, unfiltered)["sales"], 0, today)[0] == 171500   # the old result
+    # An RS sale already stored for the car goes on the next run
+    rs = {"date": "2026-08-03", "price": 198000, "venue": "bat", "listing_id": "118956237",
+          "title": "2023 Porsche 718 Cayman GT4 RS Weissach"}
+    h = json.loads(FIXTURE_STORE.read_text())
+    h["fx-gt4"]["sales"].append(rs)
+    assert gh.enforce_car_rules(h, "fx-gt4", rules) == 1 and rs not in h["fx-gt4"]["sales"]
+
+
+def test_owner_config_edits_do_not_fail_the_checks():
+    # The weekly job runs this file before it scrapes, so a valid edit to the real config must not fail
+    # it: here a new car, and a title rule that removes a stored sale on the next run. Runs the whole
+    # file on a copy of the repo with both edits made.
+    if os.environ.get("GT_NESTED_CHECK") or not shutil.which("node"):
+        return
+    root = Path(__file__).resolve().parent.parent
+    js = ("const W=require(process.argv[1]);const fs=require('fs');const p=process.argv[2];"
+          "const d=new Function(fs.readFileSync(p,'utf8')+';return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE}')();"
+          "const all=[...d.WATCHLIST,...d.TICKER_UNIVERSE];const h=JSON.parse(fs.readFileSync(process.argv[3],'utf8'));"
+          "const c=all.find(c=>(h[c.id]||{sales:[]}).sales.some(x=>x.listing_id&&x.title));"
+          "if(c)c.bat_title_exclude=[h[c.id].sales.find(x=>x.listing_id&&x.title).title];"
+          "d.TICKER_UNIVERSE.push(Object.assign({},all[0],{id:'test-new-car',symbol:'TESTNEWCAR'}));"
+          "fs.writeFileSync(p,W.serializeConfig(d.CHART_COLORS,d.WATCHLIST,d.TICKER_UNIVERSE));")
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp)
+        for name in ("frontend", "scraper", "tests"):
+            shutil.copytree(root / name, copy / name, ignore=shutil.ignore_patterns("__pycache__", "scraped_prices.json"))
+        subprocess.run(["node", "-e", js, str(copy / "frontend" / "config-writer.js"), str(copy / "frontend" / "cars.config.js"),
+                        str(copy / "frontend" / "price_history.json")], check=True)
+        assert "test-new-car" in (copy / "frontend" / "cars.config.js").read_text()
+        run = subprocess.run([sys.executable, str(copy / "tests" / "test_sales.py")], capture_output=True, text=True,
+                             env=dict(os.environ, GT_NESTED_CHECK="1"))
+    assert run.returncode == 0, run.stdout[-3000:] + run.stderr[-3000:]
 
 
 def test_interrupted_store_write_keeps_the_old_file():

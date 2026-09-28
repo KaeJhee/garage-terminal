@@ -918,6 +918,7 @@ var TICKER_UNIVERSE = [
     color:      CHART_COLORS.mint,
     note:       'Manual-only NA flat-6. RS variant added 2022 with $30K premium.',
     bat_url:    'https://bringatrailer.com/search/?s=cayman+gt4',
+    bat_title_exclude: ['GT4 RS'],
     market_url: 'https://www.classic.com/m/porsche/718-cayman/gt4/',
     cost_to_own: {
       insurance_annual:       3500,
@@ -946,6 +947,7 @@ var TICKER_UNIVERSE = [
     color:      CHART_COLORS.orange,
     note:       'Last 488-platform mid-engine V8. Spider adds ~$30K. 296 GTB successor.',
     bat_url:    'https://bringatrailer.com/search/?s=f8+tributo',
+    bat_title_exclude: ['Spider'],
     market_url: 'https://www.classic.com/m/ferrari/f8-tributo/',
     cost_to_own: {
       insurance_annual:       8000,

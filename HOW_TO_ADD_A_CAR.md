@@ -88,8 +88,8 @@ The editor recomputes `import_duty_est` and `total_first_year_extra` for you on 
 | `color` | Chart line color. Pick a name from `CHART_COLORS` at the top of the file. |
 | `bat_url` | Bring a Trailer search URL the scraper hits. Example: `bringatrailer.com/search/?s=mclaren+p1`. |
 | `bat_title_include` | Optional. A listing counts only if its title contains one of these words, for a specific trim. Example: `['Turbo II', 'Turbo 2']`. |
-| `bat_title_exclude` | Optional. Listings whose title contains any of these words are skipped. Example: `['Speciale A', 'Aperta']`. |
-| `market_url` | classic.com market page the scraper hits. Example: `classic.com/m/mclaren/p1/`. |
+| `bat_title_exclude` | Optional. Listings whose title contains any of these words are skipped. Example: `['Speciale A', 'Aperta']`. Bring a Trailer often sends a search to a model page that also lists sibling versions (the `cayman gt4` search lands on a page with GT4 RS sales), so exclude those here. |
+| `market_url` | The dashboard's Market link. Not scraped. Example: `classic.com/m/mclaren/p1/`. |
 | `cost_to_own` | First-year ownership costs. See below. `import_duty_est` and `total_first_year_extra` are derived, not entered. |
 
 ### Cost-to-own is self-computing
