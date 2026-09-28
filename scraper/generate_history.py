@@ -31,8 +31,12 @@ DATA MODEL (price_history.json):
 Every file is written to a .tmp file first and then moved into place, so a
 crash mid-write never leaves a truncated store, config or data.js.
 
+After a scrape it also writes scraper/run_results.json (not committed): each
+car's price decision (applied, unchanged, refused by the price band, or
+skipped) and the anchor audit, for scraper/report.py.
+
 With no scraped_prices.json, or with --dev, only data.js is rewritten;
-price_history.json and cars.config.js are left untouched.
+price_history.json, cars.config.js and run_results.json are left untouched.
 """
 
 import argparse, hashlib, json, os, random, re, statistics
@@ -48,6 +52,7 @@ SCRAPED_PATH       = ROOT / "scraper" / "scraped_prices.json"
 PRICE_HISTORY_PATH = ROOT / "frontend" / "price_history.json"
 DATA_JS_PATH       = ROOT / "frontend" / "data.js"
 CONFIG_JS_PATH     = ROOT / "frontend" / "cars.config.js"
+RESULTS_PATH       = ROOT / "scraper" / "run_results.json"   # read by report.py; gitignored
 
 ROLL_WINDOW  = 90    # trailing days for the 90-day meta figures
 STALE_DAYS   = 30    # no real sale in this many days -> stale flag
@@ -218,63 +223,81 @@ def build_data_js(history, today, cfg):
     write_atomic(DATA_JS_PATH, out)
     stale=sum(1 for m in meta.values() if m.get("stale"))
     print(f"OK  data.js: {len(baked)} cars, {sum(len(s) for s in sales.values())} real sales, {stale} stale")
-    audit_anchors(cfg, history)
+    return audit_anchors(cfg, history, today)
 
-def audit_anchors(cfg, history):
+def audit_anchors(cfg, history, today):
     """Flag cars whose avg_price (the chart anchor) looks wrong, so a bad value
-    surfaces here instead of silently distorting a chart."""
-    warns = []
+    surfaces here instead of silently distorting a chart. The sales check uses
+    only stored sales with a listing ID from the last RECENT_DAYS (the window
+    the price is set from): untitled backfill rows, such as parts listings
+    stored years ago, can't raise it. Returns [{id, check, message}]."""
+    found = []
+    cutoff = (today - timedelta(days=sp.RECENT_DAYS)).isoformat()
     for cid, c in cfg.items():
         avg = c.get("avg_price", 0)
         if not avg:
             continue
         lo, hi = c.get("low_price", 0), c.get("high_price", 0)
         if lo and avg < lo * 0.5:
-            warns.append(f"  !! {cid}: avg_price ${avg:,} far BELOW low_price ${lo:,}")
+            found.append({"id": cid, "check": "below band", "avg": avg, "low": lo,
+                          "message": f"avg_price ${avg:,} far BELOW low_price ${lo:,}"})
         elif hi and avg > hi * 1.5:
-            warns.append(f"  !! {cid}: avg_price ${avg:,} far ABOVE high_price ${hi:,}")
-        raw = [float(s["price"]) for s in history.get(cid, {}).get("sales", [])
-               if s.get("venue") not in NOT_SALES]
-        if len(raw) >= 3:
-            med = statistics.median(raw)
+            found.append({"id": cid, "check": "above band", "avg": avg, "high": hi,
+                          "message": f"avg_price ${avg:,} far ABOVE high_price ${hi:,}"})
+        listed = [float(s["price"]) for s in history.get(cid, {}).get("sales", [])
+                  if s.get("listing_id") and s.get("venue") not in NOT_SALES and s.get("date", "") >= cutoff]
+        if len(listed) >= 3:
+            med = statistics.median(listed)
             if med > avg * 3 or med < avg / 3:
-                warns.append(f"  !! {cid}: real-sales median ${med:,.0f} disagrees with avg_price ${avg:,} (>3x)")
-    if warns:
+                found.append({"id": cid, "check": "sales median", "avg": avg, "median": round(med), "n": len(listed),
+                              "message": f"median of {len(listed)} recent listed sales ${med:,.0f} disagrees with avg_price ${avg:,} (>3x)"})
+    if found:
         print("\n** ANCHOR AUDIT - review before trusting these charts:")
-        for w in warns:
-            print(w)
+        for f in found:
+            print(f"  !! {f['id']}: {f['message']}")
     else:
         print("\nAnchor audit: all avg_price anchors look consistent.")
+    return found
 
 # ---------------------------------------------------------------------------
 # Config patch (avg_price and prev_avg only)
 # ---------------------------------------------------------------------------
 
-def patch_config_prices(config_text, price_data):
+def patch_config_prices(config_text, price_data, results=None):
+    """Returns the patched config text. If a dict is passed as results, each
+    car's decision is recorded in it: {result: applied | unchanged | refused |
+    skipped | not found, old, new, and for a refusal the allowed range}."""
     updated=config_text
+    results={} if results is None else results
     for cid,result in price_data.items():
         if result.get("confidence")!="scraped": 
+            results[cid]={"result":"skipped","confidence":result.get("confidence")}
             print(f"  --  {cid}: skip patch ({result.get('confidence')})"); continue
         new_avg=int(round(result["price"]))
         idm=re.search(rf"id:\s*['\"]{re.escape(cid)}['\"]", updated)
-        if not idm: print(f"  WARN {cid}: id not found"); continue
+        if not idm: results[cid]={"result":"not found","new":new_avg}; print(f"  WARN {cid}: id not found"); continue
         bs=idm.start(); be=updated.find("\n  },",bs)
-        if be==-1: print(f"  WARN {cid}: block end not found"); continue
+        if be==-1: results[cid]={"result":"not found","new":new_avg}; print(f"  WARN {cid}: block end not found"); continue
         be+=len("\n  },"); block=updated[bs:be]
         oam=re.search(r"avg_price:\s*(\d+)",block)
-        if not oam: continue
+        if not oam: results[cid]={"result":"not found","new":new_avg}; continue
+        old_avg=int(oam.group(1))
         # The car's own configured band is the sanity check: a median far outside it means the
         # search matched a different model, so keep the current price and say so
         lo=re.search(r"low_price:\s*(\d+)",block); hi=re.search(r"high_price:\s*(\d+)",block)
         if lo and hi and not (int(lo.group(1))*0.8 <= new_avg <= int(hi.group(1))*1.25):
-            print(f"  !!  {cid}: median ${new_avg:,} is outside ${int(int(lo.group(1))*0.8):,}-${int(int(hi.group(1))*1.25):,} (80% of low_price to 125% of high_price), not applied"); continue
-        old_avg=int(oam.group(1))
+            allowed=[int(int(lo.group(1))*0.8), int(int(hi.group(1))*1.25)]
+            results[cid]={"result":"refused","old":old_avg,"new":new_avg,"allowed":allowed,
+                          "low_price":int(lo.group(1)),"high_price":int(hi.group(1))}
+            print(f"  !!  {cid}: median ${new_avg:,} is outside ${allowed[0]:,}-${allowed[1]:,} (80% of low_price to 125% of high_price), not applied"); continue
         if new_avg==old_avg:
             # Unchanged price: leave prev_avg alone so the change arrow keeps the last real move
+            results[cid]={"result":"unchanged","old":old_avg,"new":new_avg}
             print(f"  ==  {cid}: unchanged at ${new_avg:,}"); continue
         nb=re.sub(r"(avg_price:\s*)\d+",rf"\g<1>{new_avg}",block,count=1)
         nb=re.sub(r"(prev_avg:\s*)\d+",rf"\g<1>{old_avg}",nb,count=1)
         updated=updated[:bs]+nb+updated[be:]
+        results[cid]={"result":"applied","old":old_avg,"new":new_avg}
         print(f"  OK  {cid}: avg {old_avg:,}->{new_avg:,}")
     return updated
 
@@ -328,9 +351,16 @@ def run_generate(dev_mode):
     print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")
 
     print("Patching cars.config.js (avg_price and prev_avg)...")
-    write_atomic(CONFIG_JS_PATH, patch_config_prices(CONFIG_JS_PATH.read_text(),price_data))
+    decisions={}
+    write_atomic(CONFIG_JS_PATH, patch_config_prices(CONFIG_JS_PATH.read_text(),price_data,decisions))
     print("OK  Updated cars.config.js")
-    build_data_js(history,today,load_cars_from_config())   # re-read so each line ends at the patched price
+    anchors=build_data_js(history,today,load_cars_from_config())   # re-read so each line ends at the patched price
+    # For report.py: tied to this scrape by its scraped_at, so a stale file is never read as this run's
+    scraped_at=json.loads(SCRAPED_PATH.read_text()).get("scraped_at") if SCRAPED_PATH.exists() else None
+    write_atomic(RESULTS_PATH, json.dumps({"scraped_at":scraped_at,"generated_on":today_iso,
+                                           "prices":decisions,"anchor_audit":anchors}, indent=1))
+    print(f"OK  {RESULTS_PATH.name}: {sum(1 for r in decisions.values() if r['result']=='refused')} refused by the price band, "
+          f"{len(anchors)} anchor warning(s)")
     print("Done.")
 
 def main():

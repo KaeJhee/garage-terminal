@@ -15,6 +15,7 @@ venv/
 
 # Generated each run by the scraper (do not commit)
 scraper/scraped_prices.json
+scraper/run_results.json
 
 # Never commit packaged zips into the repo
 *.zip

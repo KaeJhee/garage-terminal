@@ -408,9 +408,9 @@ def generator_sandbox(scraped=None):
         (tmp / "data.js").write_text("")
         if scraped is not None:
             (tmp / "scraped_prices.json").write_text(json.dumps(scraped))
-        names = ("SCRAPED_PATH", "PRICE_HISTORY_PATH", "DATA_JS_PATH", "CONFIG_JS_PATH")
+        names = ("SCRAPED_PATH", "PRICE_HISTORY_PATH", "DATA_JS_PATH", "CONFIG_JS_PATH", "RESULTS_PATH")
         saved = [getattr(gh, n) for n in names] + [sp.CONFIG_PATH]
-        for n, f in zip(names, ("scraped_prices.json", "price_history.json", "data.js", "cars.config.js")):
+        for n, f in zip(names, ("scraped_prices.json", "price_history.json", "data.js", "cars.config.js", "run_results.json")):
             setattr(gh, n, tmp / f)
         sp.CONFIG_PATH = tmp / "cars.config.js"
         try:
@@ -446,11 +446,50 @@ def test_no_new_placeholder_rows_and_stored_rows_kept():
     with generator_sandbox(scraped) as tmp:
         gh.run_generate(False)
         after = json.loads((tmp / "price_history.json").read_text())
-        assert sorted(p.name for p in tmp.iterdir()) == ["cars.config.js", "data.js", "price_history.json", "scraped_prices.json"]
+        assert sorted(p.name for p in tmp.iterdir()) == ["cars.config.js", "data.js", "price_history.json", "run_results.json",
+                                                         "scraped_prices.json"]
     for cid in scraped["prices"]:
         assert after[cid] == store[cid], cid                                 # nothing added, nothing removed
     manual = lambda h: sum(1 for e in h.values() for x in e["sales"] if x["venue"] == "manual-auto")
     assert manual(after) == manual(store)
+
+
+def test_run_results_record_band_refusals_and_the_anchor_audit():
+    # report.py reads scraper/run_results.json: each car's price decision and the anchor audit,
+    # tied to the scrape by its scraped_at
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    sale = lambda lid, price: {"listing_id": lid, "price": price, "date": "2026-09-01", "title": "1990 Nissan Skyline GT-R",
+                               "url": f"https://bringatrailer.com/listing/{lid}/"}
+    scraped = {"scraped_at": "2026-09-28T22:05:18+00:00", "prices": {
+        "fx-r32": {"avg_price": 9000, "confidence": "scraped", "rejected": [],
+                   "sales": [sale("7001", 9000), sale("7002", 9500), sale("7003", 8800), sale("7004", 9100)]},
+        "fx-gt4": {"avg_price": 118000, "confidence": "thin", "sales": [], "rejected": []}}}
+    with generator_sandbox(scraped) as tmp:
+        gh.run_generate(False)
+        res = json.loads((tmp / "run_results.json").read_text())
+        cfg = (tmp / "cars.config.js").read_text()
+    assert res["scraped_at"] == "2026-09-28T22:05:18+00:00"
+    assert res["prices"]["fx-r32"] == {"result": "refused", "old": 46000, "new": 9000, "allowed": [24000, 100000],
+                                       "low_price": 30000, "high_price": 80000}
+    assert res["prices"]["fx-gt4"] == {"result": "skipped", "confidence": "thin"}
+    assert "avg_price:  46000" in cfg                                                  # refused: price kept
+    assert [a["id"] for a in res["anchor_audit"]] == ["fx-r32"] and res["anchor_audit"][0]["check"] == "sales median"
+
+
+def test_anchor_audit_reads_only_recent_listed_sales():
+    today = date(2026, 9, 28)
+    cfg = {"viper": {"avg_price": 445000, "low_price": 200000, "high_price": 600000}}
+    junk = [{"date": "2024-05-01", "price": p, "venue": "bat-backfill"} for p in (4141, 4300, 5700, 9999, 50000, 64001)]
+    real = [{"date": "2025-06-01", "price": p, "venue": "bat", "listing_id": str(p)} for p in (430000, 445000, 470000)]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert gh.audit_anchors(cfg, {"viper": {"sales": junk + real}}, today) == []   # untitled backfill junk: no alarm
+        wrong = [{"date": "2025-06-01", "price": p, "venue": "bat", "listing_id": str(p)} for p in (34000, 35000, 36000)]
+        found = gh.audit_anchors(cfg, {"viper": {"sales": real[:1] + wrong}}, today)
+        assert [(f["id"], f["check"], f["median"]) for f in found] == [("viper", "sales median", 35500)]
+        old = [dict(x, date="2019-01-01") for x in wrong]                                # older than the price window
+        assert gh.audit_anchors(cfg, {"viper": {"sales": real[:1] + old}}, today) == []
+        assert gh.audit_anchors({"v": {"avg_price": 27000, "low_price": 150000, "high_price": 280000}}, {}, today)[0]["check"] == "below band"
 
 
 def test_model_page_sibling_variant_follows_the_car_title_filter():
