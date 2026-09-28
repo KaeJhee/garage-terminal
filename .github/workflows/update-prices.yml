@@ -1,16 +1,25 @@
 name: Weekly Price Update
 
 # ============================================================
-# SCHEDULE: Runs every Sunday at midnight UTC
-# Trigger manually from the Actions tab via "Run workflow"
+# Runs every Sunday at midnight UTC, on "Run workflow" in the Actions tab,
+# and on every push to main that changes cars.config.js or the scraper
+# (an editor Export uploaded on github.com publishes itself). The bot's own
+# commit is pushed with the built-in GITHUB_TOKEN, and GitHub never starts
+# workflows from those pushes, so it cannot trigger another run.
 # ============================================================
 on:
   schedule:
     - cron: '0 0 * * 0'   # Sunday 00:00 UTC
   workflow_dispatch:        # Manual trigger - useful for testing
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/cars.config.js'
+      - 'scraper/**'
 
 permissions:
   contents: write   # Needed to commit and push data.js + config + price_history
+  issues: write     # The "Cars that need a look" issue
 
 # One data update at a time; a second run waits instead of racing the first one's push
 concurrency:
@@ -42,6 +51,7 @@ jobs:
       - name: Run checks
         run: |
           python tests/test_sales.py
+          python tests/test_report.py
           node tests/test_config_roundtrip.js
           node tests/validate_config.js
 
@@ -60,7 +70,8 @@ jobs:
           name: scraped_prices
           path: scraper/scraped_prices.json
 
-      # Append real sales to price_history.json, patch config, rebuild data.js
+      # Append real sales to price_history.json, patch config, rebuild data.js.
+      # Also writes scraper/run_results.json (gitignored) for the report step.
       - name: Regenerate price history
         run: python scraper/generate_history.py
 
@@ -85,10 +96,10 @@ jobs:
       - name: Push changes
         run: git pull --rebase && git push
 
-      - name: Print summary
-        run: |
-          echo "### Price Update Complete" >> $GITHUB_STEP_SUMMARY
-          echo "Updated: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
-          if [ -f scraper/scraped_prices.json ]; then
-            python3 -c "import json;d=json.load(open('scraper/scraped_prices.json'));print(f\"- Total: {d.get('total_cars','?')}  Scraped: {d.get('scraped','?')}  Thin: {d.get('thin','?')}  Fallback: {d.get('fallback','?')}\")" >> $GITHUB_STEP_SUMMARY
-          fi
+      # Per-car table in this run's summary, and the "Cars that need a look" issue:
+      # opened when a car needs a look, a comment (which emails the owner) only when
+      # the list changes, closed when the list is empty. It changes no file in the repo.
+      - name: Report cars that need a look
+        run: python scraper/report.py --issue
+        env:
+          GH_TOKEN: ${{ github.token }}

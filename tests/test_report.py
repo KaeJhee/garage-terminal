@@ -186,6 +186,7 @@ def test_main_writes_the_summary_and_skips_the_issue_on_a_stale_results_file():
     results = {"scraped_at": "2026-09-28T22:05:18+00:00", "prices": {"fx-gt4": {"result": "applied", "old": 118000, "new": 134000}},
                "anchor_audit": []}
     with fake_gh() as tmp, report_sandbox(scrape, results):
+        saved = os.environ.get("GITHUB_STEP_SUMMARY")                         # the runner's own, in CI
         os.environ["GITHUB_STEP_SUMMARY"] = str(tmp / "summary.md")
         try:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -201,7 +202,10 @@ def test_main_writes_the_summary_and_skips_the_issue_on_a_stale_results_file():
                 report.main(["--issue"])
             assert "belongs to another scrape" in (tmp / "summary.md").read_text() and calls(tmp)[n:] == []
         finally:
-            os.environ.pop("GITHUB_STEP_SUMMARY", None)
+            if saved is None:
+                os.environ.pop("GITHUB_STEP_SUMMARY", None)
+            else:
+                os.environ["GITHUB_STEP_SUMMARY"] = saved
 
 
 if __name__ == "__main__":

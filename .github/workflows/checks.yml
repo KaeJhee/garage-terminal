@@ -29,6 +29,9 @@ jobs:
       - name: Scraper and history tests
         run: python tests/test_sales.py
 
+      - name: Report and issue tests
+        run: python tests/test_report.py
+
       - name: Config writer round trip
         run: node tests/test_config_roundtrip.js
 
