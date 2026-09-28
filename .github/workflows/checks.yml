@@ -1,0 +1,36 @@
+name: Checks
+
+# Runs on every push and pull request: the scraper and history tests, the config
+# writer round trip, and the cars.config.js sanity checks.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Tests and config checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Scraper and history tests
+        run: python tests/test_sales.py
+
+      - name: Config writer round trip
+        run: node tests/test_config_roundtrip.js
+
+      - name: Config sanity checks
+        run: node tests/validate_config.js

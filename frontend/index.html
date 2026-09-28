@@ -1332,6 +1332,7 @@ canvas { display: block; }
 <!-- cars.config.js is the SINGLE SOURCE OF TRUTH for all car data.
      To add a car: edit cars.config.js only. No changes needed here. -->
 <script src="cars.config.js"></script>
+<script src="config-writer.js"></script>
 <script src="data.js"></script>
 
 <script>
@@ -2332,42 +2333,7 @@ function copyCarConfig() {
          || WATCHLIST.find(function(c) { return c.id === id; });
   if (!car) return;
 
-  var cto = car.cost_to_own || {};
-  var snippet =
-    '  {\n' +
-    '    id:         ' + JSON.stringify(car.id) + ',\n' +
-    '    symbol:     ' + JSON.stringify(car.symbol) + ',\n' +
-    '    make:       ' + JSON.stringify(car.make) + ',\n' +
-    '    model:      ' + JSON.stringify(car.model) + ',\n' +
-    '    years:      ' + JSON.stringify(car.years) + ',\n' +
-    '    category:   ' + JSON.stringify(car.category) + ',\n' +
-    '    engine:     ' + JSON.stringify(car.engine) + ',\n' +
-    '    power:      ' + JSON.stringify(car.power) + ',\n' +
-    '    avg_price:  ' + (car.avg_price || 0) + ',\n' +
-    '    low_price:  ' + (car.low_price || 0) + ',\n' +
-    '    high_price: ' + (car.high_price || 0) + ',\n' +
-    '    prev_avg:   ' + (car.prev_avg || 0) + ',\n' +
-    '    color:      ' + JSON.stringify(car.color) + ',\n' +
-    '    note:       ' + JSON.stringify(car.note || '') + ',\n' +
-    '    bat_url:    ' + JSON.stringify(car.bat_url || '') + ',\n' +
-    (car.bat_title_include && car.bat_title_include.length ? '    bat_title_include: ' + JSON.stringify(car.bat_title_include) + ',\n' : '') +
-    (car.bat_title_exclude && car.bat_title_exclude.length ? '    bat_title_exclude: ' + JSON.stringify(car.bat_title_exclude) + ',\n' : '') +
-    '    market_url: ' + JSON.stringify(car.market_url || '') + ',\n' +
-    (car.scrape_extras && car.scrape_extras.length ? '    scrape_extras: ' + JSON.stringify(car.scrape_extras) + ',\n' : '') +
-    '    cost_to_own: {\n' +
-    '      insurance_annual:       ' + (cto.insurance_annual || 0) + ',\n' +
-    '      insurance_note:         ' + JSON.stringify(cto.insurance_note || '') + ',\n' +
-    '      import_duty_pct:        ' + (cto.import_duty_pct || 0) + ',\n' +
-    '      import_duty_est:        ' + ctoDerived(car).duty + ',\n' +
-    '      shipping_est:           ' + (cto.shipping_est || 0) + ',\n' +
-    (cto.registration_est ? '      registration_est:       ' + cto.registration_est + ',\n' : '') +
-    (cto.registration_note ? '      registration_note:      ' + JSON.stringify(cto.registration_note) + ',\n' : '') +
-    (cto.import_note ? '      import_note:            ' + JSON.stringify(cto.import_note) + ',\n' : '') +
-    '      maintenance_annual:     ' + (cto.maintenance_annual || 0) + ',\n' +
-    '      maintenance_note:       ' + JSON.stringify(cto.maintenance_note || '') + ',\n' +
-    '      total_first_year_extra: ' + ctoDerived(car).total + ',\n' +
-    '    },\n' +
-    '  },';
+  var snippet = GarageConfig.serializeCar(cfgStripRuntime(car), CHART_COLORS);
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(snippet).then(function() {
@@ -2401,19 +2367,22 @@ function showToast(msg) {
 // add/edit/remove cars with LIVE in-session preview, then EXPORT a complete,
 // valid cars.config.js that Code commits to the repo. The committed file is
 // the single source of truth the scraper + dashboard both read on next deploy.
-var CFG_EDIT = { list: [], editingId: null };
+var CFG_EDIT = { list: [], editingId: null, renamed: {} };
 var CFG_CATEGORIES = ['JDM','Modern','Exotic','Muscle','European','Chinese'];
+
+var CFG_TEXT_KEYS = ['make','model','years','engine','power','note','bat_url','market_url'];
 
 function cfgStripRuntime(c) {
   var r = {}; Object.keys(c).forEach(function(k){
     if (k==='delta'||k==='delta_pct'||k==='delta_dir'||k==='_list') return;
+    if (c[k]==='' && CFG_TEXT_KEYS.indexOf(k)>=0) return;   // a blank text field is the same as no field
     r[k] = c[k];
   }); return r;
 }
 
 function cfgBuildWorkingList() {
   var list = [], seen = {};
-  WATCHLIST.forEach(function(c){ var r=cfgStripRuntime(c); r._list='watchlist'; list.push(r); seen[c.id]=true; });
+  WATCHLIST.forEach(function(c){ if (c.__sessionOnly) return; var r=cfgStripRuntime(c); r._list='watchlist'; list.push(r); seen[c.id]=true; });
   TICKER_UNIVERSE.forEach(function(t){ if(seen[t.id]) return; var r=cfgStripRuntime(t); r._list='ticker'; list.push(r); seen[t.id]=true; });
   return list;
 }
@@ -2421,6 +2390,7 @@ function cfgBuildWorkingList() {
 function openConfigEditor() {
   CFG_EDIT.list = cfgBuildWorkingList();
   CFG_EDIT.editingId = null;
+  CFG_EDIT.renamed = {};
   renderConfigList();
   document.getElementById('cfgBackdrop').classList.add('open');
   document.getElementById('cfgModal').classList.add('open');
@@ -2511,31 +2481,28 @@ function gn(id){ var v=gv(id); return v===''? undefined : Number(v); }
 function saveConfigCar() {
   var id = gv('f_id');
   if (!id) { showToast('id is required'); return; }
-  var cto = {};
-  var ins=gn('f_ins'), duty=gn('f_duty'), ship=gn('f_ship'), reg=gn('f_reg'), maint=gn('f_maint');
-  if (ins!==undefined) cto.insurance_annual = ins;
-  if (gv('f_insnote')) cto.insurance_note = gv('f_insnote');
-  if (duty!==undefined) cto.import_duty_pct = duty;
-  if (ship!==undefined) cto.shipping_est = ship;
-  if (reg!==undefined) cto.registration_est = reg;
-  if (gv('f_impnote')) cto.import_note = gv('f_impnote');
-  if (maint!==undefined) cto.maintenance_annual = maint;
-  if (gv('f_maintnote')) cto.maintenance_note = gv('f_maintnote');
-
-  var car = {
-    id: id, symbol: gv('f_symbol')||id.toUpperCase(), make: gv('f_make'), model: gv('f_model'),
-    years: gv('f_years'), category: gv('f_category'), engine: gv('f_engine'), power: gv('f_power'),
-    avg_price: gn('f_avg')||0, prev_avg: gn('f_prev')||gn('f_avg')||0,
-    low_price: gn('f_low')||0, high_price: gn('f_high')||0,
-    color: CHART_COLORS[gv('f_color')] || CHART_COLORS[Object.keys(CHART_COLORS)[0]],
-    note: gv('f_note'), bat_url: gv('f_bat'), market_url: gv('f_market'),
-    cost_to_own: cto, _list: gv('f_list')||'ticker',
-  };
   var idx = CFG_EDIT.list.findIndex(function(c){return c.id===(CFG_EDIT.editingId||id);});
-  // Scraper-only fields have no form input; keep them from the entry being edited
-  if (idx>=0) ['bat_title_include','bat_title_exclude','scrape_extras'].forEach(function(k){
-    if (CFG_EDIT.list[idx][k]) car[k] = CFG_EDIT.list[idx][k];
-  });
+  // Start from the entry being edited, so fields the form has no input for (title filters,
+  // scrape_extras, registration_note, ...) carry over. A cleared input removes its field.
+  var car = idx>=0 ? JSON.parse(JSON.stringify(CFG_EDIT.list[idx])) : {};
+  var cto = car.cost_to_own || {};
+  function text(o, k, v) { if (v) o[k] = v; else delete o[k]; }
+  function num(o, k, v) { if (v!==undefined) o[k] = v; else delete o[k]; }
+  num(cto,'insurance_annual',gn('f_ins'));    text(cto,'insurance_note',gv('f_insnote'));
+  num(cto,'import_duty_pct',gn('f_duty'));    num(cto,'shipping_est',gn('f_ship'));
+  num(cto,'registration_est',gn('f_reg'));    text(cto,'import_note',gv('f_impnote'));
+  num(cto,'maintenance_annual',gn('f_maint')); text(cto,'maintenance_note',gv('f_maintnote'));
+
+  car.id = id; car.symbol = gv('f_symbol')||id.toUpperCase();
+  text(car,'make',gv('f_make')); text(car,'model',gv('f_model')); text(car,'years',gv('f_years'));
+  car.category = gv('f_category');
+  text(car,'engine',gv('f_engine')); text(car,'power',gv('f_power'));
+  car.avg_price = gn('f_avg')||0; car.prev_avg = gn('f_prev')||gn('f_avg')||0;
+  car.low_price = gn('f_low')||0; car.high_price = gn('f_high')||0;
+  car.color = CHART_COLORS[gv('f_color')] || CHART_COLORS[Object.keys(CHART_COLORS)[0]];
+  text(car,'note',gv('f_note')); text(car,'bat_url',gv('f_bat')); text(car,'market_url',gv('f_market'));
+  car.cost_to_own = cto; car._list = gv('f_list')||'ticker';
+  if (CFG_EDIT.editingId && CFG_EDIT.editingId !== id) CFG_EDIT.renamed[CFG_EDIT.editingId] = id;
   if (idx>=0) CFG_EDIT.list[idx] = car; else CFG_EDIT.list.push(car);
   CFG_EDIT.editingId = null;
   renderConfigList();
@@ -2548,13 +2515,30 @@ function deleteConfigCar(id) {
 }
 
 function applyConfigToSession() {
-  var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';}).map(cfgStripRuntime);
-  var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';}).map(cfgStripRuntime);
-  WATCHLIST = wl.map(function(c){
+  // Cleared text fields preview as blank; Export still leaves them out
+  function blanks(c){ var b={}; CFG_TEXT_KEYS.forEach(function(k){ b[k]=''; }); return Object.assign(b,c); }
+  var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';}).map(cfgStripRuntime).map(blanks);
+  var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';}).map(cfgStripRuntime).map(blanks);
+  function withDelta(c, extra){
     var delta=(c.avg_price||0)-(c.prev_avg||0);
     var dp = c.prev_avg ? (delta/c.prev_avg)*100 : 0;
-    return Object.assign({},c,{delta:delta,delta_pct:dp,delta_dir:delta>=0?'up':'down'});
+    return Object.assign({},c,{delta:delta,delta_pct:dp,delta_dir:delta>=0?'up':'down'},extra||{});
+  }
+  // Cars opened with View on Main Chart stay on the chart for this session, in their place.
+  // In the working list they are ticker cars, so Export keeps them in TICKER_UNIVERSE.
+  var inWl = {}; wl.forEach(function(c){ inWl[c.id]=true; });
+  var after = {}, prev = '';
+  function current(id){ for (var n=0; CFG_EDIT.renamed[id] && n<50; n++) id = CFG_EDIT.renamed[id]; return id; }
+  WATCHLIST.forEach(function(old){
+    var id = current(old.id);
+    if (!old.__sessionOnly || inWl[id]) { prev = id; return; }
+    var t = tk.find(function(c){return c.id===id;});
+    if (t) (after[prev] = after[prev] || []).push(withDelta(t,{__sessionOnly:true}));
   });
+  var next = (after[''] || []).slice(); delete after[''];
+  wl.forEach(function(c){ next.push(withDelta(c)); (after[c.id]||[]).forEach(function(x){ next.push(x); }); delete after[c.id]; });
+  Object.keys(after).forEach(function(k){ next = next.concat(after[k]); });   // the car before them was renamed or deleted
+  WATCHLIST = next;
   TICKER_UNIVERSE = tk;
   TICKER_DATA = TICKER_UNIVERSE.map(function(t){
     var delta=(t.avg_price||0)-(t.prev_avg||0);
@@ -2572,77 +2556,10 @@ function applyConfigToSession() {
 function cfgHexToKey() {
   var m={}; Object.keys(CHART_COLORS).forEach(function(k){ m[CHART_COLORS[k]]=k; }); return m;
 }
-function jsStr(s){ return "'"+String(s===undefined?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'"; }
-
-function serializeCto(cto, avg) {
-  var duty = Math.round((avg||0)*(cto.import_duty_pct||0));
-  var total = duty + (cto.shipping_est||0)+(cto.registration_est||0)+(cto.insurance_annual||0)+(cto.maintenance_annual||0);
-  var L=['    cost_to_own: {'];
-  if (cto.insurance_annual!==undefined) L.push('      insurance_annual: '+cto.insurance_annual+',');
-  if (cto.insurance_note) L.push('      insurance_note: '+jsStr(cto.insurance_note)+',');
-  if (cto.import_duty_pct!==undefined) L.push('      import_duty_pct: '+cto.import_duty_pct+',');
-  L.push('      import_duty_est: '+duty+',');
-  if (cto.shipping_est!==undefined) L.push('      shipping_est: '+cto.shipping_est+',');
-  if (cto.registration_est!==undefined) L.push('      registration_est: '+cto.registration_est+',');
-  if (cto.import_note) L.push('      import_note: '+jsStr(cto.import_note)+',');
-  if (cto.maintenance_annual!==undefined) L.push('      maintenance_annual: '+cto.maintenance_annual+',');
-  if (cto.maintenance_note) L.push('      maintenance_note: '+jsStr(cto.maintenance_note)+',');
-  L.push('      total_first_year_extra: '+total+',');
-  L.push('    },');
-  return L.join('\n');
-}
-
-function serializeCar(c) {
-  var hk = cfgHexToKey();
-  var colorExpr = hk[c.color] ? 'CHART_COLORS.'+hk[c.color] : jsStr(c.color);
-  var L=['  {'];
-  L.push('    id: '+jsStr(c.id)+',');
-  L.push('    symbol: '+jsStr(c.symbol)+',');
-  if (c.make) L.push('    make: '+jsStr(c.make)+',');
-  if (c.model) L.push('    model: '+jsStr(c.model)+',');
-  if (c.years) L.push('    years: '+jsStr(c.years)+',');
-  if (c.category) L.push('    category: '+jsStr(c.category)+',');
-  if (c.engine) L.push('    engine: '+jsStr(c.engine)+',');
-  if (c.power) L.push('    power: '+jsStr(c.power)+',');
-  L.push('    avg_price: '+(c.avg_price||0)+',');
-  if (c.low_price!==undefined) L.push('    low_price: '+(c.low_price||0)+',');
-  if (c.high_price!==undefined) L.push('    high_price: '+(c.high_price||0)+',');
-  L.push('    prev_avg: '+(c.prev_avg||c.avg_price||0)+',');
-  L.push('    color: '+colorExpr+',');
-  if (c.note) L.push('    note: '+jsStr(c.note)+',');
-  if (c.bat_url) L.push('    bat_url: '+jsStr(c.bat_url)+',');
-  if (c.bat_title_include && c.bat_title_include.length) L.push('    bat_title_include: ['+c.bat_title_include.map(jsStr).join(', ')+'],');
-  if (c.bat_title_exclude && c.bat_title_exclude.length) L.push('    bat_title_exclude: ['+c.bat_title_exclude.map(jsStr).join(', ')+'],');
-  if (c.market_url) L.push('    market_url: '+jsStr(c.market_url)+',');
-  if (c.scrape_extras && c.scrape_extras.length) {
-    L.push('    scrape_extras: [');
-    c.scrape_extras.forEach(function(x){ L.push('      { type: '+jsStr(x.type)+', url: '+jsStr(x.url)+' },'); });
-    L.push('    ],');
-  }
-  if (c.cost_to_own && Object.keys(c.cost_to_own).length) L.push(serializeCto(c.cost_to_own, c.avg_price));
-  L.push('  },');
-  return L.join('\n');
-}
-
-function serializeConfig() {
+function exportConfigFile() {
   var wl = CFG_EDIT.list.filter(function(c){return c._list==='watchlist';});
   var tk = CFG_EDIT.list.filter(function(c){return c._list==='ticker';});
-  var colorLines = Object.keys(CHART_COLORS).map(function(k){ return '  '+k+": '"+CHART_COLORS[k]+"',"; }).join('\n');
-  var out = '';
-  out += '/* ============================================================\n';
-  out += ' * cars.config.js  -  Garage Terminal single source of truth\n';
-  out += ' * Generated by the in-dashboard Config Editor on '+new Date().toISOString().slice(0,10)+'.\n';
-  out += ' * import_duty_est and total_first_year_extra are auto-derived\n';
-  out += ' * (avg_price * import_duty_pct + flat costs). Edit avg_price, not these.\n';
-  out += ' * ============================================================ */\n\n';
-  out += 'var CHART_COLORS = {\n'+colorLines+'\n};\n\n';
-  out += 'var WATCHLIST = [\n' + wl.map(serializeCar).join('\n') + '\n];\n\n';
-  out += 'var TICKER_UNIVERSE = [\n' + tk.map(serializeCar).join('\n') + '\n];\n';
-  return out;
-}
-
-function exportConfigFile() {
-  var text = serializeConfig();
+  var text = GarageConfig.serializeConfig(CHART_COLORS, wl, tk);
   // validate it parses before download
   try { new Function(text + '; return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE};')(); }
   catch (e) { showToast('Export error: '+e.message); return; }

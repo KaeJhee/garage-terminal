@@ -1,4 +1,7 @@
 """Checks for the sale-parsing and history rules. Run: python tests/test_sales.py"""
+import re
+import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -112,6 +115,56 @@ def test_band_guard():
     assert "avg_price:  210000" in out and "prev_avg:   195000" in out     # inside the band: applied
 
 
+def test_unchanged_price_keeps_the_change_arrow():
+    cfg = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n"
+           "    high_price: 80000,\n    prev_avg:   45000,\n  },")
+    meta = {"r32": {"import_duty_pct": 0}}
+    same = {"r32": {"price": 46000, "confidence": "scraped"}}
+    assert gh.patch_config_prices(cfg, same, meta) == cfg                   # re-runs leave prev_avg alone
+    moved = gh.patch_config_prices(cfg, {"r32": {"price": 50000, "confidence": "scraped"}}, meta)
+    assert "avg_price:  50000" in moved and "prev_avg:   46000" in moved     # a real move records the old price
+    assert gh.patch_config_prices(moved, {"r32": {"price": 50000, "confidence": "scraped"}}, meta) == moved
+
+
+def test_editor_export_still_patches():
+    if not shutil.which("node"):
+        print("  (skipped: node not installed)"); return
+    root = Path(__file__).resolve().parent.parent
+    js = ("const W=require(process.argv[1]);const fs=require('fs');"
+          "const d=new Function(fs.readFileSync(process.argv[2],'utf8')+';return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE}')();"
+          "process.stdout.write(W.serializeConfig(d.CHART_COLORS,d.WATCHLIST,d.TICKER_UNIVERSE));")
+    exported = subprocess.run(["node", "-e", js, str(root / "frontend" / "config-writer.js"),
+                               str(root / "frontend" / "cars.config.js")], capture_output=True, text=True, check=True).stdout
+    meta = gh.load_cars_from_config()
+    # Move every car with a price band to a new price inside it, then check each block was patched
+    moves = {}
+    for cid, m in meta.items():
+        lo, hi = m["low_price"], m["high_price"]
+        if 0 < lo < hi:
+            new = int(round((lo + hi) / 2, -2))
+            moves[cid] = new + 100 if new == m["avg_price"] else new
+    assert moves
+    out = gh.patch_config_prices(exported, {c: {"price": p, "confidence": "scraped"} for c, p in moves.items()}, meta)
+    for cid, new in moves.items():
+        start = out.index(f"id:         '{cid}'")
+        block = out[start:out.index("\n  },", start)]
+        assert re.search(rf"avg_price:\s*{new}\b", block), block
+        assert re.search(rf"prev_avg:\s*{meta[cid]['avg_price']}\b", block), block
+        if meta[cid]["import_duty_pct"]:
+            duty = gh.js_round(new * meta[cid]["import_duty_pct"])
+            assert re.search(rf"import_duty_est:\s*{duty}\b", block), block
+
+
+def test_duty_rounds_halves_up_like_the_page():
+    assert (gh.js_round(1162.5), gh.js_round(562.5), gh.js_round(1162.4), gh.js_round(0)) == (1163, 563, 1162, 0)
+    cfg = ("  {\n    id:         'r32',\n    avg_price:  46000,\n    low_price:  7777,\n    high_price: 80000,\n"
+           "    prev_avg:   45000,\n    cost_to_own: {\n      import_duty_pct:        0.025,\n      import_duty_est:        1150,\n"
+           "      shipping_est:           4500,\n      total_first_year_extra: 5650,\n    },\n  },")
+    meta = {"r32": {"import_duty_pct": 0.025, "shipping_est": 4500}}
+    out = gh.patch_config_prices(cfg, {"r32": {"price": 46500, "confidence": "scraped"}}, meta)
+    assert "import_duty_est:        1163" in out and "total_first_year_extra: 5663" in out, out
+
+
 def test_backfill_skips_unsold_cards():
     # Wrapped the way real search pages are, so a page-level container can't leak a 'Bid to' price
     page = '<body class="search search-results"><div class="search-results-loop">' + BAT_PAGE + '</div></body>'
@@ -147,12 +200,16 @@ def test_plotted_count_covers_the_chart_year():
 
 def test_undated_sold_figures_are_reference_only():
     pages = {"bat_search": BAT_PAGE, "carsandbids": '<div class="result">Sold for $45,000</div>'}
+    real_fetch, real_delay = sp.fetch, sp.DELAY
     sp.fetch = lambda client, url: pages["bat_search" if "bringatrailer" in url else "carsandbids"]
     sp.DELAY = 0
     car = {"id": "r33", "label": "Nissan Skyline R33 GT-R", "fallback_avg": 40000, "sources": [
         {"type": "bat_search", "url": "https://bringatrailer.com/x", "years": "1995-1998"},
         {"type": "carsandbids", "url": "https://carsandbids.com/x"}]}
-    r = sp.scrape_car(None, car)
+    try:
+        r = sp.scrape_car(None, car)
+    finally:
+        sp.fetch, sp.DELAY = real_fetch, real_delay
     assert [x["listing_id"] for x in r["sales"]] == ["101", "104"]
     assert r["sold_ref"] == 45000 and r["confidence"] == "thin" and r["avg_price"] == 40000
     assert sorted(x["reason"] for x in r["rejected"]) == ["model year", "unsold"]

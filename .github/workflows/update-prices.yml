@@ -45,6 +45,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r scraper/requirements.txt
 
+      # Nothing is scraped or committed unless the tests and config checks pass
+      - name: Run checks
+        run: |
+          python tests/test_sales.py
+          node tests/test_config_roundtrip.js
+          node tests/validate_config.js
+
       # Scrape sold-only median prices (reads cars.config.js automatically)
       - name: Scrape latest prices
         run: python scraper/scrape_prices.py
@@ -54,6 +61,13 @@ jobs:
       # Append real sales to price_history.json, rebuild data.js, patch config
       - name: Regenerate price history
         run: python scraper/generate_history.py
+
+      # The patched config and the rebuilt data.js must both still load before they are committed
+      - name: Check generated files
+        run: |
+          node tests/validate_config.js
+          node tests/test_config_roundtrip.js
+          node -e "new Function(require('fs').readFileSync('frontend/data.js','utf8')+';return BAKED_HISTORY')()" && echo "data.js OK"
 
       # Commit. IMPORTANT: price_history.json is the persistent sales store and
       # MUST be committed, or every weekly run starts from an empty history.

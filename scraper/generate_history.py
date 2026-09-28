@@ -31,7 +31,7 @@ ACCUMULATION:
   --dev writes nothing real (preview build only).
 """
 
-import argparse, hashlib, json, random, re, subprocess, sys, time, statistics
+import argparse, hashlib, json, math, random, re, subprocess, sys, time, statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -302,6 +302,11 @@ def audit_anchors(cfg, history):
 # Config patch (price + duty recompute)
 # ---------------------------------------------------------------------------
 
+def js_round(x):
+    """Round halves up, as the page and the config editor do (JS Math.round). Python's round() rounds halves to even."""
+    r = math.floor(x)
+    return int(r + 1 if x - r >= 0.5 else r)
+
 def patch_config_prices(config_text, price_data, meta):
     updated=config_text
     for cid,result in price_data.items():
@@ -320,8 +325,12 @@ def patch_config_prices(config_text, price_data, meta):
         lo=re.search(r"low_price:\s*(\d+)",block); hi=re.search(r"high_price:\s*(\d+)",block)
         if lo and hi and not (int(lo.group(1))*0.8 <= new_avg <= int(hi.group(1))*1.25):
             print(f"  !!  {cid}: median ${new_avg:,} is outside ${int(int(lo.group(1))*0.8):,}-${int(int(hi.group(1))*1.25):,} (80% of low_price to 125% of high_price), not applied"); continue
-        old_avg=int(oam.group(1)); m=meta.get(cid,{}); pct=m.get("import_duty_pct",0)
-        nd=int(round(new_avg*pct))
+        old_avg=int(oam.group(1))
+        if new_avg==old_avg:
+            # Unchanged price: leave prev_avg alone so the change arrow keeps the last real move
+            print(f"  ==  {cid}: unchanged at ${new_avg:,}"); continue
+        m=meta.get(cid,{}); pct=m.get("import_duty_pct",0)
+        nd=js_round(new_avg*pct)
         nt=nd+m.get("shipping_est",0)+m.get("registration_est",0)+m.get("insurance_annual",0)+m.get("maintenance_annual",0)
         nb=re.sub(r"(avg_price:\s*)\d+",rf"\g<1>{new_avg}",block,count=1)
         nb=re.sub(r"(prev_avg:\s*)\d+",rf"\g<1>{old_avg}",nb,count=1)
@@ -395,10 +404,11 @@ def run_generate(dev_mode):
     real=sum(len([s for s in e["sales"] if s.get("venue") not in ("manual","manual-auto")]) for e in history.values())
     print(f"OK  price_history.json: {len(history)} cars, {real} real sales total")
 
-    build_data_js(history,today,meta)
     print("Patching cars.config.js (price + duty recompute)...")
     CONFIG_JS_PATH.write_text(patch_config_prices(CONFIG_JS_PATH.read_text(),price_data,meta))
-    print("OK  Updated cars.config.js"); print("Done.")
+    print("OK  Updated cars.config.js")
+    build_data_js(history,today,load_cars_from_config())   # re-read so each line ends at the patched price
+    print("Done.")
 
 def main():
     ap=argparse.ArgumentParser()
