@@ -12,35 +12,28 @@ on:
 permissions:
   contents: write   # Needed to commit and push data.js + config + price_history
 
-# ============================================================
-# SECRETS (repo -> Settings -> Secrets):
-#   GH_PAT             - Personal Access Token (Contents: read/write)
-#   NETLIFY_HOOK_URL   - Netlify Build Hook URL (optional)
-#   VERCEL_DEPLOY_HOOK - Vercel Deploy Hook URL (optional)
-# ============================================================
+# One data update at a time; a second run waits instead of racing the first one's push
+concurrency:
+  group: garage-data
+  cancel-in-progress: false
 
 jobs:
   update-prices:
     name: Scrape Prices & Regenerate History
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
+      # The built-in GITHUB_TOKEN pushes the bot commit; Vercel deploys every push to main
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: scraper/requirements.txt
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Install dependencies
         run: pip install -r scraper/requirements.txt
@@ -52,13 +45,22 @@ jobs:
           node tests/test_config_roundtrip.js
           node tests/validate_config.js
 
-      # Scrape sold-only median prices (reads cars.config.js automatically)
+      # Scrape sold-only median prices from Bring a Trailer (reads cars.config.js automatically).
+      # Fails, and writes nothing, if no page shows a single sold result.
       - name: Scrape latest prices
         run: python scraper/scrape_prices.py
         env:
           SCRAPE_DELAY_SEC: '3'
 
-      # Append real sales to price_history.json, rebuild data.js, patch config
+      # Keep the raw scrape for 90 days, even when a later step fails
+      - name: Upload scraped_prices.json
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: scraped_prices
+          path: scraper/scraped_prices.json
+
+      # Append real sales to price_history.json, patch config, rebuild data.js
       - name: Regenerate price history
         run: python scraper/generate_history.py
 
@@ -79,31 +81,14 @@ jobs:
           git add frontend/data.js frontend/cars.config.js frontend/price_history.json
           git diff --staged --quiet || git commit -m "chore: weekly price update $(date -u +'%Y-%m-%d')"
 
+      # Take any commit pushed while this ran; a real conflict fails the job loudly
       - name: Push changes
-        run: git push
-
-      - name: Trigger Netlify redeploy
-        if: success()
-        run: |
-          if [ -n "${{ secrets.NETLIFY_HOOK_URL }}" ]; then
-            curl -s -X POST -H "Content-Type: application/json" "${{ secrets.NETLIFY_HOOK_URL }}" && echo "Netlify triggered"
-          else
-            echo "NETLIFY_HOOK_URL not set - skipping Netlify."
-          fi
-
-      - name: Trigger Vercel redeploy
-        if: success()
-        run: |
-          if [ -n "${{ secrets.VERCEL_DEPLOY_HOOK }}" ]; then
-            curl -s -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}" && echo "Vercel triggered"
-          else
-            echo "VERCEL_DEPLOY_HOOK not set - Vercel auto-deploys on push."
-          fi
+        run: git pull --rebase && git push
 
       - name: Print summary
         run: |
           echo "### Price Update Complete" >> $GITHUB_STEP_SUMMARY
           echo "Updated: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
           if [ -f scraper/scraped_prices.json ]; then
-            python3 -c "import json;d=json.load(open('scraper/scraped_prices.json'));print(f\"- Total: {d.get('total_cars','?')}  Scraped: {d.get('scraped','?')}  Fallback: {d.get('fallback','?')}\")" >> $GITHUB_STEP_SUMMARY
+            python3 -c "import json;d=json.load(open('scraper/scraped_prices.json'));print(f\"- Total: {d.get('total_cars','?')}  Scraped: {d.get('scraped','?')}  Thin: {d.get('thin','?')}  Fallback: {d.get('fallback','?')}\")" >> $GITHUB_STEP_SUMMARY
           fi
