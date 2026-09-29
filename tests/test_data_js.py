@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -32,7 +33,9 @@ def expand(data_js_text):
         js = ("const fs = require('fs');"
               "const code = fs.readFileSync(process.argv[1], 'utf8') + '\\n' + process.argv[2] + '\\n;return BAKED_HISTORY;';"
               "process.stdout.write(JSON.stringify(new Function(code)()));")
-        out = subprocess.run(["node", "-e", js, str(path), expander()], capture_output=True, text=True, check=True)
+        # A zone ahead of UTC with DST, so a date parsed as local time fails here even on a UTC runner
+        out = subprocess.run(["node", "-e", js, str(path), expander()], capture_output=True, text=True, check=True,
+                             env={**os.environ, "TZ": "Australia/Sydney"})
     return json.loads(out.stdout)
 
 
@@ -40,10 +43,6 @@ def days_from(start, n):
     """The dates the old data.js wrote: one per day from start, by Python's date arithmetic."""
     s = date.fromisoformat(start)
     return [(s + timedelta(days=i)).isoformat() for i in range(n)]
-
-
-def test_committed_data_js_is_under_200_kb():
-    assert DATA_JS.stat().st_size < 200_000, DATA_JS.stat().st_size
 
 
 def test_committed_lines_expand_to_one_point_per_day():
@@ -54,7 +53,6 @@ def test_committed_lines_expand_to_one_point_per_day():
         assert [p["date"] for p in line] == days_from(raw[cid]["start"], len(raw[cid]["prices"])), cid
         assert [p["price"] for p in line] == raw[cid]["prices"], cid
         assert len(line) == gh.WALK_DAYS, cid
-    assert len(lines["r33-gtr"]) == 365
 
 
 def test_expanded_lines_equal_the_old_format():

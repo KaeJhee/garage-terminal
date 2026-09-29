@@ -56,6 +56,7 @@ jobs:
         run: |
           python tests/test_sales.py
           python tests/test_report.py
+          python tests/test_data_js.py
           node tests/test_config_roundtrip.js
           node tests/validate_config.js
 
