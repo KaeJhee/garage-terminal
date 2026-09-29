@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scraper"))
@@ -134,6 +134,19 @@ def test_unchanged_price_keeps_the_change_arrow():
     moved = gh.patch_config_prices(cfg, {"r32": {"price": 50000, "confidence": "scraped"}})
     assert "avg_price:  50000" in moved and "prev_avg:   46000" in moved     # a real move records the old price
     assert gh.patch_config_prices(moved, {"r32": {"price": 50000, "confidence": "scraped"}}) == moved
+
+
+def test_decimal_price_is_patched_whole():
+    # The editor accepts 45000.5; the patch must replace the whole number, not only its digits before the point
+    cfg = ("  {\n    id:         'r32',\n    avg_price:  45000.5,\n    low_price:  7777.5,\n"
+           "    high_price: 80000,\n    prev_avg:   44000,\n  },")
+    res = {}
+    out = gh.patch_config_prices(cfg, {"r32": {"price": 50000, "confidence": "scraped"}}, res)
+    assert "avg_price:  50000,\n" in out and "prev_avg:   45000.5,\n" in out, out
+    assert res["r32"] == {"result": "applied", "old": 45000.5, "new": 50000}
+    res = {}
+    assert gh.patch_config_prices(cfg, {"r32": {"price": 5000, "confidence": "scraped"}}, res) == cfg
+    assert res["r32"]["result"] == "refused" and res["r32"]["allowed"] == [6222, 100000]
 
 
 def test_editor_export_still_patches():
@@ -459,7 +472,9 @@ def test_run_results_record_band_refusals_and_the_anchor_audit():
     # tied to the scrape by its scraped_at
     if not shutil.which("node"):
         print("  (skipped: node not installed)"); return
-    sale = lambda lid, price: {"listing_id": lid, "price": price, "date": "2026-09-01", "title": "1990 Nissan Skyline GT-R",
+    # dated from the generator's own clock, since run_generate audits the last two years before it
+    when = (gh.datetime.now(gh.UTC).date() - timedelta(days=27)).isoformat()
+    sale = lambda lid, price: {"listing_id": lid, "price": price, "date": when, "title": "1990 Nissan Skyline GT-R",
                                "url": f"https://bringatrailer.com/listing/{lid}/"}
     scraped = {"scraped_at": "2026-09-28T22:05:18+00:00", "prices": {
         "fx-r32": {"avg_price": 9000, "confidence": "scraped", "rejected": [],

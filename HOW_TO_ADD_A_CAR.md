@@ -11,14 +11,14 @@ Bookmark the upload page: https://github.com/KaeJhee/garage-terminal/upload/main
 3. Fill in the fields (see "Fields" below) and click **Save Car**. Repeat for other cars.
 4. Optional: **Preview in Session** shows the result in this browser only.
 5. Click **Export cars.config.js**. The file downloads.
-6. Open the upload page, drag the file in, and click **Commit changes**. The name must be exactly `cars.config.js`. If your browser saved `cars.config (1).js`, rename it first.
+6. Open the upload page, drag the file in, and click **Commit changes**. The name must be exactly `cars.config.js`. Before exporting, delete the older `cars.config.js` from your Downloads folder, so the browser does not save the new one as `cars.config (1).js`.
 7. A price run starts by itself. A few minutes later the site shows the change and fresh prices.
 
-If the file has a problem, such as two cars with the same id, the run stops before anything changes. The site keeps the last good data and GitHub emails you that the run failed. Open the run, read the one-line reason, fix the car in the editor, and upload again.
+The site shows an uploaded file straight away, before any check runs. If the file has a problem, such as two cars with the same id, the price run stops, prices are not updated, and GitHub emails you that the run failed. Open the run and read the one-line reason. Then fix the car in the editor and upload again, or put the previous version back (see "If something goes wrong"). Check the site after every upload.
 
 Do not rename an existing car's id: its stored sales are kept under the old id and would stop showing. Change the model or symbol instead.
 
-A removed car disappears for new visitors. Anyone who moved it to their watchlist keeps it until they clear the site's data.
+A removed car disappears for new visitors. Anyone who moved it to their watchlist keeps it until they clear the site's data. Your own Export also clears it from your browser, so it does not come back in a later Export.
 
 ## Make a ticker car permanent in the watchlist
 
@@ -46,7 +46,7 @@ Click the car in the ticker, click **Move to Watchlist**, then **CONFIG**, **Exp
 
 ## Title filters and extra searches: a small edit on github.com
 
-The editor has no boxes for `bat_title_include`, `bat_title_exclude` or `scrape_extras`, but Export keeps them. To change one, open `frontend/cars.config.js` on GitHub, click the pencil (Edit this file), edit the lines inside the car's block, and click **Commit changes**. That also starts a price run. Examples:
+The editor has no boxes for `bat_title_include`, `bat_title_exclude` or `scrape_extras`, but Export keeps them. To change one, open `frontend/cars.config.js` on GitHub, click the pencil (Edit this file), edit the lines inside the car's block, and click **Commit changes**. That also starts a price run. The site shows the edit at once, so keep the commas and quotes exactly as in these examples, then check the site. If it shows no cars, undo the edit (see "If something goes wrong"). Examples:
 
 ```js
     bat_title_exclude: ['GT4 RS'],
@@ -57,15 +57,15 @@ The editor has no boxes for `bat_title_include`, `bat_title_exclude` or `scrape_
 
 ## Cars that need a look
 
-After every price run, the issue **Cars that need a look** lists each car whose price could not be checked, with what to do. GitHub emails you when it opens and when its list changes (you watch your own repository by default). It closes itself when the list is empty. Each run's full table is on the run's Summary page in the Actions tab.
+After every price run, the issue **Cars that need a look** lists each car whose price could not be checked, with what to do. GitHub emails you when it opens and when its list changes (you watch your own repository by default). It closes itself when the list is empty. If you close it yourself, it stays closed until the list changes. Each run's full table is on the run's Summary page in the Actions tab.
 
 | Code | What it means | What to do |
 |---|---|---|
 | NO_BAT_SEARCH | The car has no Bring a Trailer search. | Put a search in `bat_url`, or add a `scrape_extras` search if `bat_url` must point elsewhere. |
 | SEARCH_404 | Bring a Trailer found no results for the search. | Try plainer words, such as a model name instead of a chassis code. |
-| FETCH_FAILED | Bring a Trailer did not answer. | Usually nothing. If it repeats next week, check the search link. |
+| FETCH_FAILED | Bring a Trailer did not answer. A first failure is only mentioned below the list; the car joins the list if it fails again the next run. | Usually nothing. If it is in the list, check the search link. |
 | NO_CARDS | The page loaded but showed no listings. | Change `bat_url` to a search that shows this car. |
-| ALL_REJECTED | Listings were found, none counted: unsold, other years or parts, title words, or a price far off. | If they are this car, widen `years` or the title words. If not, change `bat_url`. |
+| ALL_REJECTED | Listings were found, none counted: unsold, other years or parts, title words, or a price far off. | The issue says which. Other years or title words: widen `years` or the title words. Price far off: set `avg_price`, `low_price` and `high_price` near the sale prices. Other cars: change `bat_url`. |
 | BAND_REFUSED | The sales median is outside the price band, so the price was kept. | If the sales are the right car, use the suggested `low_price` and `high_price`. If not, fix the search. |
 | ANCHOR_OFF | `avg_price` is far from its own band or its recent sales. | Correct whichever of `avg_price`, `low_price` or `high_price` is wrong. |
 | THIN | Fewer than 3 recent sales, so the price holds. | Nothing. Listed for information. |
@@ -73,8 +73,9 @@ After every price run, the issue **Cars that need a look** lists each car whose 
 
 ## If something goes wrong
 
-- Re-running is always safe: Actions tab, **Weekly Price Update**, **Run workflow**. A run with no new sales leaves every price as it is.
-- A failed run keeps the last good data on the site, and the run page keeps its scrape as a download for 90 days.
+- Re-running is always safe: Actions tab, **Weekly Price Update**, **Run workflow**. A price can still move without a new sale, when an old sale passes two years and stops counting.
+- A failed scrape commits nothing, so prices stay as they were. The run page keeps its scrape as a download for 90 days. An uploaded `cars.config.js` is different: it is live as soon as it is uploaded.
+- A file with another name, such as `cars.config (1).js`, was uploaded by mistake: every price run fails until it is gone. Open it on GitHub, open the **...** menu, choose **Delete file**, and click **Commit changes**. Then upload `cars.config.js` again.
 - To undo a change: open `frontend/cars.config.js` on GitHub, click **History**, open the version you want, click **Download raw file**, and upload it with the upload link. The run that follows puts back the newer scraped price of every car with enough recent sales.
 
 ## Hosting

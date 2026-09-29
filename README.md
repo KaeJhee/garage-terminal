@@ -17,7 +17,7 @@ A Bloomberg Terminal-style dashboard of collector car prices: JDM, exotic, Europ
 - `years` and the optional title words keep other model years, trims and parts listings out.
 - The estimate line is generated the same way every run, so it is an illustration, not observed prices.
 - Chinese cars have no US market. Their prices are set by hand in the editor.
-- The price run stops before committing when a check fails or no Bring a Trailer page shows a sold result, so the site keeps the last good data.
+- The price run stops before committing when a check fails or no Bring a Trailer page shows a sold result, so the prices stay as they were. An uploaded `cars.config.js` is published as soon as it is uploaded, whether or not its checks pass.
 
 ## Keeping it up to date
 

@@ -2572,6 +2572,16 @@ function exportConfigFile() {
   // validate it parses before download
   try { new Function(text + '; return {CHART_COLORS,WATCHLIST,TICKER_UNIVERSE};')(); }
   catch (e) { showToast('Export error: '+e.message); return; }
+  // This browser's Move to Watchlist list forgets cars this Export leaves out of the watchlist
+  // (removed, renamed or moved back to the ticker), so the next load and Export do not bring them back
+  try {
+    var inWl = {}; wl.forEach(function(c){ inWl[c.id] = true; });
+    var stored = JSON.parse(localStorage.getItem(USER_WATCHLIST_KEY) || '[]');
+    if (Array.isArray(stored)) {
+      var kept = stored.filter(function(c){ return c && inWl[c.id]; });
+      if (kept.length !== stored.length) localStorage.setItem(USER_WATCHLIST_KEY, JSON.stringify(kept));
+    }
+  } catch (e) {}
   var blob = new Blob([text], {type:'text/javascript'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');

@@ -14,7 +14,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'frontend/cars.config.js'
+      - 'frontend/cars.config*.js'   # also a misnamed upload such as "cars.config (1).js", so its run fails with a plain reason
       - 'scraper/**'
 
 permissions:
@@ -33,9 +33,13 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # The built-in GITHUB_TOKEN pushes the bot commit; Vercel deploys every push to main
+      # The built-in GITHUB_TOKEN pushes the bot commit; Vercel deploys every push to main.
+      # ref: start from main as it is when this run starts, not from the commit that queued it,
+      # so a run that waited behind another one builds on that run's commit (a re-run does too)
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v6

@@ -58,6 +58,8 @@ for (const c of cars) {
     if (!m || (m[2] && /^\d/.test(m[2]) && +m[2] < +m[1])) errors.push(name + ': years "' + c.years + '" should look like 1995-1998, 2023-Present or 2020');
   }
   if (c.low_price > 0 && c.high_price > 0 && c.low_price >= c.high_price) errors.push(name + ': low_price must be below high_price');
+  const fractions = ['avg_price', 'prev_avg', 'low_price', 'high_price'].filter(k => typeof c[k] === 'number' && !Number.isInteger(c[k]));
+  if (fractions.length) warnings.push(name + ': ' + fractions.join(', ') + ' should be whole dollars (no cents). It still works.');
 
   const isBat = u => /^https:\/\/(www\.)?bringatrailer\.com\//.test(u || '');
   const extras = Array.isArray(c.scrape_extras) ? c.scrape_extras.filter(x => x && x.type === 'bat_search' && isBat(x.url)) : [];

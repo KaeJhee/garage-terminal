@@ -13,7 +13,13 @@ checker's warnings. It writes no file in the repo.
      with the gh command and the workflow's built-in token. It is opened, or
      reopened, when a car needs a look; it gets a comment only when the list
      of cars and reasons changes (the comment is what emails the owner); it
-     is closed when the list is empty.
+     is closed when the list is empty. If the owner closes it by hand, it
+     stays closed until the list changes.
+
+     The issue body remembers two things in HTML comments: the list the
+     owner was last told about, and the cars whose search failed this run.
+     The comment that emails the owner is written before the body, so a gh
+     failure between the two repeats the email next run instead of losing it.
 
 Status:  PRICED  enough recent sales set the price
          THIN    some sales, fewer than needed; the price holds
@@ -23,7 +29,9 @@ Status:  PRICED  enough recent sales set the price
 Reason codes. Those in NEEDS_A_LOOK put the car in the issue:
   NO_BAT_SEARCH  no Bring a Trailer search in bat_url or scrape_extras
   SEARCH_404     Bring a Trailer answered 404 (its answer to no results)
-  FETCH_FAILED   Bring a Trailer did not answer (network error or 5xx)
+  FETCH_FAILED   Bring a Trailer did not answer (network error or 5xx). A
+                 first failure is listed for information only; a car goes in
+                 the issue when its search also failed on the previous run
   NO_CARDS       the page loaded but showed no listings (with the final URL)
   ALL_REJECTED   listings were found and none counted (with counts)
   BAND_REFUSED   the sales median is outside the car's price band, so the
@@ -50,6 +58,7 @@ ROOT       = Path(__file__).parent.parent
 VALIDATOR  = ROOT / "tests" / "validate_config.js"
 TITLE      = "Cars that need a look"
 MARKER     = "cars-that-need-a-look"
+FETCH_MARKER = "search-failed-last-run"
 NEEDS_A_LOOK = ("NO_BAT_SEARCH", "SEARCH_404", "FETCH_FAILED", "NO_CARDS", "ALL_REJECTED", "BAND_REFUSED", "ANCHOR_OFF")
 STATUS_ORDER = ("NO_DATA", "THIN", "PRICED", "MANUAL")
 
@@ -61,8 +70,7 @@ WHAT_TO_DO = {
     "FETCH_FAILED":  "Usually nothing: this is often a short outage. If it shows up again next week, open the search link "
                      "and check that it still works.",
     "NO_CARDS":      "Open the link. If it shows no listings for this car, change bat_url to a search that does.",
-    "ALL_REJECTED":  "Open the search link and compare the listings with the car. If they are this car, widen years or "
-                     "loosen the title words. If they are other cars, change bat_url.",
+    "ALL_REJECTED":  "",   # worded from the reject counts, per car
     "BAND_REFUSED":  "",   # the suggestion is per car
     "ANCHOR_OFF":    "Check avg_price, low_price and high_price against the sales on the search link, and correct the "
                      "one that is wrong.",
@@ -108,6 +116,21 @@ def rejects_text(counts, years=None):
     return ", ".join(f"{v} {words[k]}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]) if v)
 
 
+def all_rejected_advice(counts):
+    """What to do for ALL_REJECTED, from why the listings were turned away."""
+    look = "Open the search link and compare the listings with the car."
+    other = "If they are other cars, change bat_url."
+    top = max(counts, key=lambda k: counts[k]) if any(counts.values()) else None
+    if top == "implausible":
+        return (f"{look} If they are this car, its price is probably wrong: set avg_price near those sale prices, "
+                f"with low_price and high_price around it. {other}")
+    if top in ("model year", "title filter"):
+        return f"{look} If they are this car, widen years or loosen the title words. {other}"
+    if top == "unsold":
+        return f"{look} Unsold auctions never count, so if they are this car there is nothing to fix yet. {other}"
+    return f"{look} {other}"
+
+
 def fetch_problem(car, fetched):
     """The reason a car with no counted sale got none, from its per-source diagnostics."""
     with_cards = [d for d in fetched if d.get("cards") or d.get("items")]
@@ -135,7 +158,7 @@ def fetch_problem(car, fetched):
 
 def build_row(car, scraped, decision, anchors, store_sales, today):
     cid = car["id"]
-    row = {"id": cid, "label": car.get("label") or cid, "codes": [], "short": [], "why": {}, "search": None}
+    row = {"id": cid, "label": car.get("label") or cid, "codes": [], "short": [], "why": {}, "fix": {}, "search": None}
     avg = car.get("avg_price") or 0
     if car.get("category") == "Chinese":
         row.update(status="MANUAL", price=f"{money(avg)} (by hand)")
@@ -157,6 +180,12 @@ def build_row(car, scraped, decision, anchors, store_sales, today):
         elif conf == "fallback":
             code, short, why = fetch_problem(car, fetched)
             row["codes"].append(code); row["short"].append(short); row["why"][code] = why
+            if code == "ALL_REJECTED":
+                counts = {}
+                for d in fetched:
+                    for k, v in (d.get("rejects") or {}).items():
+                        counts[k] = counts.get(k, 0) + v
+                row["fix"]["ALL_REJECTED"] = all_rejected_advice(counts)
         else:
             bad = [d for d in fetched if d.get("status") != 200]
             if bad:   # another search worked, so this is a note, not a problem
@@ -186,12 +215,12 @@ def build_row(car, scraped, decision, anchors, store_sales, today):
             if band:
                 row["short"].append(f"median {money(d['new'])} outside {money(d['allowed'][0])}-{money(d['allowed'][1])}; "
                                     f"suggested band {money(band[0])}-{money(band[1])}")
-                row["fix"] = (f"If these sales are the right car, set low_price to {money(band[0])} and high_price to "
+                row["fix"]["BAND_REFUSED"] = (f"If these sales are the right car, set low_price to {money(band[0])} and high_price to "
                               f"{money(band[1])} (the middle 80% of its {band[2]} listed sales in the last two years). "
                               "If they are a different car, fix the search instead.")
             else:
                 row["short"].append(f"median {money(d['new'])} outside {money(d['allowed'][0])}-{money(d['allowed'][1])}")
-                row["fix"] = "Check the sales on the search link. If they are the right car, widen low_price and high_price; if not, fix the search."
+                row["fix"]["BAND_REFUSED"] = "Check the sales on the search link. If they are the right car, widen low_price and high_price; if not, fix the search."
             row["why"]["BAND_REFUSED"] = why
     mine = [a for a in anchors if a["id"] == cid]
     if mine:
@@ -211,7 +240,20 @@ def anchor_text(a):
 
 
 def needs_a_look(row):
-    return [c for c in row["codes"] if c in NEEDS_A_LOOK]
+    return [c for c in row["codes"] if c in NEEDS_A_LOOK and not (c == "FETCH_FAILED" and row.get("first_failure"))]
+
+
+def hold_first_fetch_failures(rows, failed_before):
+    """A search that fails once is usually a short outage: it goes in the issue only when the same car's
+    search also failed on the previous run. failed_before is None when there is no issue to remember
+    the previous run in (then every failure counts, so a lasting one is never missed)."""
+    for r in rows:
+        if "FETCH_FAILED" in r["codes"]:
+            r["first_failure"] = failed_before is not None and r["id"] not in failed_before
+
+
+def fetch_failed(rows):
+    return " ".join(sorted(r["id"] for r in rows if "FETCH_FAILED" in r["codes"]))
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +279,8 @@ def summary_markdown(rows, when, warnings, note=None):
     order = sorted(rows, key=lambda r: (not needs_a_look(r), STATUS_ORDER.index(r["status"])))
     for r in order:
         cell = lambda s: s.replace("|", "\\|")
-        out.append(f"| {r['id']} | {r['status']} | {r['price']} | {', '.join(r['codes']) or '-'} | {cell('; '.join(r['short'])) or '-'} |")
+        short = r["short"] + (["first failure, listed only if it fails again next run"] if r.get("first_failure") else [])
+        out.append(f"| {r['id']} | {r['status']} | {r['price']} | {', '.join(r['codes']) or '-'} | {cell('; '.join(short)) or '-'} |")
     if warnings:
         out += ["", f"<details><summary>Config checks: {len(warnings)} warning(s)</summary>", ""]
         out += [f"- {w}" for w in warnings] + ["", "</details>"]
@@ -245,13 +288,26 @@ def summary_markdown(rows, when, warnings, note=None):
 
 
 def signature(rows):
-    return " ".join(f"{r['id']}:{c}" for r in rows for c in needs_a_look(r))
+    """The list the owner is told about, sorted so that the order of cars in the config does not matter."""
+    return " ".join(sorted(f"{r['id']}:{c}" for r in rows for c in needs_a_look(r)))
+
+
+def markers(body):
+    """(the list last told to the owner, the cars whose search failed on that run) from an issue body."""
+    body = body or ""
+    m = re.search(rf"<!-- {MARKER}: ?(.*?) ?-->", body)
+    f = re.search(rf"<!-- {FETCH_MARKER}: ?(.*?) ?-->", body)
+    return (m.group(1).strip() if m else ""), set(f.group(1).split()) if f else set()
+
+
+def marker_lines(sig, failed):
+    return [f"<!-- {MARKER}: {sig} -->", f"<!-- {FETCH_MARKER}: {failed} -->"]
 
 
 def issue_body(rows, when, repo):
     flagged = [r for r in rows if needs_a_look(r)]
     link = run_link()
-    out = [f"<!-- {MARKER}: {signature(rows)} -->",
+    out = marker_lines(signature(rows), fetch_failed(rows)) + [
            f"The price run found {plural(len(flagged), 'car that needs', 'cars that need')} a look. This issue updates itself after every "
            "run, and closes itself when nothing needs a look.", "",
            f"Run of {when}" + (f" ([details]({link}))." if link else "."), ""]
@@ -259,7 +315,7 @@ def issue_body(rows, when, repo):
         out += [f"### {r['id']}: {r['label']}", ""]
         for c in needs_a_look(r):
             out += [f"**{c}.** {r['why'].get(c, '')}", ""]
-            fix = r.get("fix") if c == "BAND_REFUSED" else WHAT_TO_DO[c]
+            fix = r["fix"].get(c) or WHAT_TO_DO[c]
             out += [f"What to do: {fix}", ""]
         if r.get("search"):
             out += [f"Search used: {r['search']}", ""]
@@ -267,6 +323,11 @@ def issue_body(rows, when, repo):
     if thin:
         out += ["Also thin this run (few recent sales, so the price holds; nothing to do):", ""]
         out += [f"- {r['id']}: {r['short'][-1]}" for r in thin] + [""]
+    once = [r for r in rows if r.get("first_failure")]
+    if once:
+        out += ["Bring a Trailer did not answer these searches this run. Usually a short outage, so nothing to do; "
+                "a car moves up into the list if its search fails again next run:", ""]
+        out += [f"- {r['id']}" for r in once] + [""]
     out += ["---", "",
             "How to fix a car: on the dashboard click CONFIG, click edit on the car, change the field, click Save Car, "
             f"then Export cars.config.js. Upload that file at https://github.com/{repo}/upload/main/frontend and click "
@@ -297,33 +358,64 @@ def find_issue(repo):
     return mine[0] if mine else None
 
 
-def sync_issue(rows, when, repo):
-    """Create, reopen, comment on, or close the issue. Returns what it did."""
-    issue = find_issue(repo)
+def quiet_body(repo, failed):
+    """The body while nothing needs a look. It has no date, so a clean run leaves it alone."""
+    return "\n".join(marker_lines("", failed) + [
+        "Nothing needs a look right now. This issue reopens by itself, with a comment, when a car needs a look.", "",
+        f"What each reason means: https://github.com/{repo}/blob/main/HOW_TO_ADD_A_CAR.md#cars-that-need-a-look"]) + "\n"
+
+
+_LOOKUP = object()
+
+
+def sync_issue(rows, when, repo, issue=_LOOKUP):
+    """Create, reopen, comment on, or close the issue. Returns what it did.
+
+    The marker in the body is the list the owner was last told about. Each write that emails the
+    owner (create, comment) happens before the body records the new list, so a gh failure in
+    between means a repeated email next run, never a lost one. main() passes the issue it already
+    looked up; otherwise it is looked up here and first fetch failures are held back."""
+    if issue is _LOOKUP:
+        issue = find_issue(repo)
+        hold_first_fetch_failures(rows, markers(issue["body"])[1] if issue else None)
     now = signature(rows)
+    failed = fetch_failed(rows)
     link = run_link()
     run = f"the run of {when}" + (f" ([details]({link}))" if link else "")
-    if not now:
-        if issue and issue.get("state", "").upper() == "OPEN":
-            gh_cmd(["issue", "comment", str(issue["number"]), "--repo", repo, "--body-file", "-"],
-                   f"Nothing needs a look after {run}. Closing; this issue reopens by itself if a car needs a look again.\n")
-            gh_cmd(["issue", "close", str(issue["number"]), "--repo", repo])
-            return f"closed #{issue['number']}"
-        return "nothing to report"
-    body = issue_body(rows, when, repo)
     if not issue:
-        out = gh_cmd(["issue", "create", "--repo", repo, "--title", TITLE, "--body-file", "-"], body)
+        if not now:
+            return "nothing to report"
+        out = gh_cmd(["issue", "create", "--repo", repo, "--title", TITLE, "--body-file", "-"], issue_body(rows, when, repo))
         return f"opened {out.strip()}"
     num = str(issue["number"])
-    m = re.search(rf"<!-- {MARKER}: (.*?) -->", issue.get("body") or "")
-    before = m.group(1) if m and issue.get("state", "").upper() == "OPEN" else ""
-    if (issue.get("body") or "") != body:
-        gh_cmd(["issue", "edit", num, "--repo", repo, "--body-file", "-"], body)
-    if issue.get("state", "").upper() != "OPEN":
-        gh_cmd(["issue", "reopen", num, "--repo", repo])
-    if before == now:
-        return f"#{num} unchanged"
+    is_open = issue.get("state", "").upper() == "OPEN"
+    before, failed_before = markers(issue.get("body"))
+    did = []
+    if not now:
+        if is_open:
+            gh_cmd(["issue", "close", num, "--repo", repo]); did.append(f"closed #{num}")
+        if before:      # the owner was told about a list, so tell them it is clear
+            gh_cmd(["issue", "comment", num, "--repo", repo, "--body-file", "-"],
+                   f"Nothing needs a look after {run}. This issue is closed and reopens by itself if a car needs a look again.\n")
+            did = did or [f"commented on closed #{num}"]
+        body = quiet_body(repo, failed)
+        if (issue.get("body") or "") != body and (before or failed != " ".join(sorted(failed_before))):
+            gh_cmd(["issue", "edit", num, "--repo", repo, "--body-file", "-"], body)
+            did = did or [f"#{num} updated"]
+        return did[0] if did else "nothing to report"
+    body = issue_body(rows, when, repo)
     old, new = set(before.split()), set(now.split())
+    if old == new:
+        if not is_open:
+            # Closed by hand with this same list: it stays closed, and only the failed searches are remembered
+            if set(failed.split()) != failed_before:
+                gh_cmd(["issue", "edit", num, "--repo", repo, "--body-file", "-"], body)
+            return f"#{num} unchanged (closed by hand, stays closed until the list changes)"
+        if (issue.get("body") or "") != body:
+            gh_cmd(["issue", "edit", num, "--repo", repo, "--body-file", "-"], body)
+        return f"#{num} unchanged"
+    if not is_open:
+        gh_cmd(["issue", "reopen", num, "--repo", repo])
     lines = [f"The list changed after {run}."]
     added = sorted(new - old)
     gone = sorted(old - new)
@@ -333,6 +425,7 @@ def sync_issue(rows, when, repo):
         lines.append("Fixed: " + ", ".join(x.replace(":", " (") + ")" for x in gone) + ".")
     lines.append("The issue description above has the full list and what to do.")
     gh_cmd(["issue", "comment", num, "--repo", repo, "--body-file", "-"], "\n\n".join(lines) + "\n")
+    gh_cmd(["issue", "edit", num, "--repo", repo, "--body-file", "-"], body)
     return f"commented on #{num}"
 
 
@@ -372,14 +465,18 @@ def main(argv=None):
     rows = [build_row(car, scrape.get("prices", {}).get(car["id"]), results["prices"].get(car["id"]),
                       results["anchor_audit"], store.get(car["id"], {}).get("sales", []), today)
             for car in sp.load_cars_from_config()]
+    issue = None
+    if args.issue and not note:
+        if not args.repo:
+            raise SystemExit("--issue needs --repo or GITHUB_REPOSITORY")
+        issue = find_issue(args.repo)     # it remembers which searches failed on the previous run
+        hold_first_fetch_failures(rows, markers(issue["body"])[1] if issue else None)
     emit(summary_markdown(rows, when, config_warnings(), note))
     if args.issue:
         if note:
             print("Issue not changed: " + note)
             return
-        if not args.repo:
-            raise SystemExit("--issue needs --repo or GITHUB_REPOSITORY")
-        print("Issue: " + sync_issue(rows, when[:10], args.repo))
+        print("Issue: " + sync_issue(rows, when[:10], args.repo, issue))
 
 
 if __name__ == "__main__":

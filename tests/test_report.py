@@ -74,7 +74,7 @@ def test_band_refused_suggests_a_band():
     r = row(car("vantage", low_price=150000, high_price=280000), scraped("scraped", [src(200, cards=24)]), d, store=store)
     assert r["codes"] == ["BAND_REFUSED"] and r["price"] == "$195,000 (kept)"
     assert report.suggest_band(store, TODAY) == (23000, 35000, 9)      # p10 $23,400 and p90 $34,600, rounded out
-    assert "set low_price to $23,000 and high_price to $35,000" in r["fix"] and "$27,000" in r["why"]["BAND_REFUSED"]
+    assert "set low_price to $23,000 and high_price to $35,000" in r["fix"]["BAND_REFUSED"] and "$27,000" in r["why"]["BAND_REFUSED"]
     assert report.suggest_band(store[:2], TODAY) is None
 
 
@@ -134,7 +134,8 @@ def test_issue_flow_against_a_fake_gh():
         issue = state(tmp)[1]
         assert issue["state"] == "OPEN" and issue["title"] == "Cars that need a look" and state(tmp)[0]["body"] == "hi"
         body = issue["body"]
-        assert body.startswith("<!-- cars-that-need-a-look: nsx-r:ALL_REJECTED fd-rx7:NO_CARDS -->"), body[:80]
+        assert body.startswith("<!-- cars-that-need-a-look: fd-rx7:NO_CARDS nsx-r:ALL_REJECTED -->\n"
+                               "<!-- search-failed-last-run:  -->\n"), body[:120]
         assert "https://github.com/owner/repo/upload/main/frontend" in body and "Also thin this run" in body and "r33" in body
         assert "nio" not in body                                               # Chinese cars are manual, not problems
         n = len(calls(tmp))
@@ -151,13 +152,133 @@ def test_issue_flow_against_a_fake_gh():
         assert "New: s15 (SEARCH_404)." in state(tmp)[1]["comments"][-1] and "Fixed: fd-rx7 (NO_CARDS)." in state(tmp)[1]["comments"][-1]
         assert report.sync_issue([ok, fixed_fd, r33], "2026-10-19", "owner/repo") == "closed #2"
         assert state(tmp)[1]["state"] == "CLOSED" and "Nothing needs a look" in state(tmp)[1]["comments"][-1]
+        assert report.markers(state(tmp)[1]["body"]) == ("", set())             # the bot's close clears the list
         n = len(calls(tmp))
         assert report.sync_issue([ok, fixed_fd, r33], "2026-10-26", "owner/repo") == "nothing to report" and writes(tmp, n) == []
         assert report.sync_issue([ok, new_404], "2026-11-02", "owner/repo") == "commented on #2"   # reopened, not a new issue
-        assert writes(tmp, n) == ["issue edit", "issue reopen", "issue comment"] and state(tmp)[1]["state"] == "OPEN"
+        assert writes(tmp, n) == ["issue reopen", "issue comment", "issue edit"] and state(tmp)[1]["state"] == "OPEN"
         assert len(state(tmp)) == 2
         everything = json.dumps(calls(tmp)) + json.dumps(state(tmp))
         assert SECRET not in everything and "GH_TOKEN" not in everything
+
+
+def issues(tmp):
+    return json.loads((tmp / "state.json").read_text())["issues"]
+
+
+def close_by_hand(tmp):
+    st = json.loads((tmp / "state.json").read_text())
+    st["issues"][0]["state"] = "CLOSED"
+    (tmp / "state.json").write_text(json.dumps(st))
+
+
+def sync_failing(rows, when, command):
+    os.environ["FAKE_GH_FAIL"] = command
+    try:
+        report.sync_issue(rows, when, "owner/repo")
+        raise AssertionError("expected gh to fail")
+    except SystemExit as e:
+        assert "502" in str(e)
+    finally:
+        os.environ.pop("FAKE_GH_FAIL", None)
+
+
+def test_a_gh_failure_repeats_the_email_instead_of_losing_it():
+    nsxr = row(car("nsx-r"), scraped("fallback", [src(200, cards=23, rejects={"model year": 20})]))
+    fd = row(car("fd-rx7"), scraped("fallback", [src(404)]))
+    with fake_gh() as tmp:
+        report.sync_issue([nsxr], "2026-10-04", "owner/repo")
+        sync_failing([nsxr, fd], "2026-10-11", "comment")                    # fd-rx7 is new, the comment gets a 502
+        assert issues(tmp)[0]["comments"] == []
+        assert report.sync_issue([nsxr, fd], "2026-10-18", "owner/repo") == "commented on #1"
+        assert "New: fd-rx7 (SEARCH_404)." in issues(tmp)[0]["comments"][-1]
+        assert report.sync_issue([nsxr, fd], "2026-10-25", "owner/repo") == "#1 unchanged"
+        sync_failing([], "2026-11-01", "close")                                # clean run, the close gets a 502
+        assert report.sync_issue([], "2026-11-08", "owner/repo") == "closed #1"
+        assert sum("Nothing needs a look" in c for c in issues(tmp)[0]["comments"]) == 1
+        sync_failing([nsxr], "2026-11-15", "comment")                          # reopened, then the comment fails
+        assert report.sync_issue([nsxr], "2026-11-22", "owner/repo") == "commented on #1"
+        assert issues(tmp)[0]["state"] == "OPEN" and len(issues(tmp)) == 1
+
+
+def test_an_issue_closed_by_hand_stays_closed_until_the_list_changes():
+    nsxr = row(car("nsx-r"), scraped("fallback", [src(200, cards=23, rejects={"model year": 20})]))
+    fd = row(car("fd-rx7"), scraped("fallback", [src(404)]))
+    with fake_gh() as tmp:
+        report.sync_issue([nsxr], "2026-10-04", "owner/repo")
+        close_by_hand(tmp)
+        n = len(calls(tmp))
+        for when in ("2026-10-11", "2026-10-18"):
+            assert report.sync_issue([nsxr], when, "owner/repo").startswith("#1 unchanged (closed by hand")
+        assert writes(tmp, n) == [] and issues(tmp)[0]["state"] == "CLOSED" and issues(tmp)[0]["comments"] == []
+        assert report.sync_issue([nsxr, fd], "2026-10-25", "owner/repo") == "commented on #1"   # the list changed
+        c = issues(tmp)[0]["comments"]
+        assert issues(tmp)[0]["state"] == "OPEN" and len(c) == 1 and "New: fd-rx7 (SEARCH_404)." in c[0] and "nsx-r" not in c[0]
+        close_by_hand(tmp)
+        assert report.sync_issue([], "2026-11-01", "owner/repo") == "commented on closed #1"  # now clear: say so once
+        assert report.sync_issue([], "2026-11-08", "owner/repo") == "nothing to report"
+        assert len(issues(tmp)[0]["comments"]) == 2 and issues(tmp)[0]["state"] == "CLOSED"
+
+
+def test_the_order_of_cars_does_not_change_the_list():
+    s15 = row(car("s15-spec"), scraped("fallback", [src(404)]))
+    nsxr = row(car("nsx-r"), scraped("fallback", [src(200, cards=23, rejects={"model year": 20})]))
+    with fake_gh() as tmp:
+        report.sync_issue([s15, nsxr], "2026-09-28", "owner/repo")
+        assert report.sync_issue([nsxr, s15], "2026-10-05", "owner/repo") == "#1 unchanged"   # nsx-r moved to the watchlist
+        assert issues(tmp)[0]["comments"] == []
+        # a marker written in config order (before this was sorted) still compares as the same list
+        st = json.loads((tmp / "state.json").read_text())
+        st["issues"][0]["body"] = st["issues"][0]["body"].replace("nsx-r:ALL_REJECTED s15-spec:SEARCH_404", "s15-spec:SEARCH_404 nsx-r:ALL_REJECTED")
+        (tmp / "state.json").write_text(json.dumps(st))
+        assert report.sync_issue([nsxr, s15], "2026-10-12", "owner/repo") == "#1 unchanged"
+
+
+def test_a_first_fetch_failure_is_information_only():
+    nsxr = row(car("nsx-r"), scraped("fallback", [src(200, cards=23, rejects={"model year": 20})]))
+    ok = row(car("fd-rx7"), scraped("scraped", [src(200, cards=20)]), {"result": "unchanged", "old": 1, "new": 1})
+    blip = lambda: row(car("fd-rx7"), scraped("fallback", [src(503)]))
+    with fake_gh() as tmp:
+        assert report.sync_issue([blip()], "2026-09-28", "owner/repo").startswith("opened")   # no issue to remember in yet
+        assert report.sync_issue([ok], "2026-10-05", "owner/repo") == "closed #1"
+        n = len(calls(tmp))
+        assert report.sync_issue([blip()], "2026-10-12", "owner/repo") == "#1 updated"         # remembered, no email
+        assert writes(tmp, n) == ["issue edit"] and issues(tmp)[0]["state"] == "CLOSED"
+        assert report.markers(issues(tmp)[0]["body"]) == ("", {"fd-rx7"})
+        assert report.sync_issue([ok], "2026-10-19", "owner/repo") == "#1 updated"              # it answered again: forgotten
+        assert report.sync_issue([ok], "2026-10-26", "owner/repo") == "nothing to report"
+        assert len(issues(tmp)[0]["comments"]) == 1                                             # only the first close
+        report.sync_issue([blip()], "2026-11-02", "owner/repo")
+        assert report.sync_issue([blip()], "2026-11-09", "owner/repo") == "commented on #1"    # twice in a row: a problem
+        assert "New: fd-rx7 (FETCH_FAILED)." in issues(tmp)[0]["comments"][-1]
+        # while the issue is open for another car, a first failure is listed below the problems, not in the list
+        assert report.sync_issue([nsxr, ok], "2026-11-16", "owner/repo") == "commented on #1"
+        r = blip()
+        assert report.sync_issue([nsxr, r], "2026-11-23", "owner/repo") == "#1 unchanged"
+        body = issues(tmp)[0]["body"]
+        assert r["first_failure"] and report.needs_a_look(r) == [] and "did not answer these searches" in body
+        assert report.markers(body) == ("nsx-r:ALL_REJECTED", {"fd-rx7"})
+
+
+def test_all_rejected_advice_follows_the_reject_counts():
+    def fix(rejects):
+        return row(car("x"), scraped("fallback", [src(200, cards=10, rejects=rejects)]))["fix"]["ALL_REJECTED"]
+    assert "avg_price" in fix({"implausible": 10}) and "widen years" not in fix({"implausible": 10})     # corvette-z06
+    assert "avg_price" in fix({"unsold": 1, "implausible": 2})
+    assert "widen years" in fix({"model year": 14, "implausible": 6}) and "avg_price" not in fix({"model year": 14})
+    assert "loosen the title words" in fix({"title filter": 3})
+    assert "Unsold auctions never count" in fix({"unsold": 5})
+    body = report.issue_body([row(car("z06"), scraped("fallback", [src(200, cards=10, rejects={"implausible": 10})]))], "2026-09-28", "o/r")
+    assert "set avg_price near those sale prices" in body
+
+
+def test_the_price_run_builds_on_the_current_main():
+    # A run that waited in the queue must start from main as it is then, not from the commit that queued it,
+    # or its push conflicts with the run before it. A misnamed config upload must start a run too.
+    wf = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "update-prices.yml").read_text()
+    step = wf[wf.index("uses: actions/checkout@"):wf.index("- name:", wf.index("uses: actions/checkout@"))]
+    assert "ref: ${{ github.ref }}" in step, step
+    assert "- 'frontend/cars.config*.js'" in wf and "group: garage-data" in wf and "cancel-in-progress: false" in wf
 
 
 @contextlib.contextmanager

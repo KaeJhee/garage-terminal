@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """A stand-in for the gh command, for tests/test_report.py. It records every call (arguments and
 stdin) in $FAKE_GH_LOG and keeps issues in $FAKE_GH_STATE, supporting only the issue commands
-scraper/report.py uses. It never touches the network."""
+scraper/report.py uses. $FAKE_GH_FAIL names a subcommand (comment, close, ...) that fails, after
+being logged, without changing anything. It never touches the network."""
 import json, os, sys
 
 args = sys.argv[1:]
 stdin = sys.stdin.read() if "-" in args else ""
 with open(os.environ["FAKE_GH_LOG"], "a") as f:
     f.write(json.dumps({"args": args, "stdin": stdin}) + "\n")
+if os.environ.get("FAKE_GH_FAIL") and os.environ["FAKE_GH_FAIL"] == args[1]:     # a GitHub outage on that command
+    sys.exit("HTTP 502: Server Error")
 path = os.environ["FAKE_GH_STATE"]
 state = json.load(open(path)) if os.path.exists(path) else {"issues": []}
 issues = state["issues"]

@@ -10,12 +10,28 @@ const write = d => W.serializeConfig(d.CHART_COLORS, d.WATCHLIST, d.TICKER_UNIVE
 const car = (extra) => Object.assign({ id: 't', symbol: 'T', avg_price: 100000, color: '#e8a020' }, extra);
 const one = c => parse(W.serializeConfig({ amber: '#e8a020' }, [c], [])).WATCHLIST[0];
 
+// The writer leaves out the two derived cost keys (the page works them out), and a cost_to_own left
+// empty by that. A file from before that change (an undo from History, or an Export from a page
+// opened before it) still carries them, and must pass.
+const FIXTURE = path.join(__dirname, 'fixtures', 'fixture_config.js');
+const underived = d => {
+  for (const c of [...d.WATCHLIST, ...d.TICKER_UNIVERSE]) {
+    if (!c.cost_to_own) continue;
+    delete c.cost_to_own.import_duty_est; delete c.cost_to_own.total_first_year_extra;
+    if (!Object.keys(c.cost_to_own).length) delete c.cost_to_own;
+  }
+  return d;
+};
+
 const tests = {
   'unedited export parses back identical for every car'() {
-    const orig = parse(fs.readFileSync(CONFIG, 'utf8'));
-    const again = parse(write(orig));
-    assert.deepStrictEqual(again, parse(fs.readFileSync(CONFIG, 'utf8')));
-    assert.ok(orig.WATCHLIST.length + orig.TICKER_UNIVERSE.length > 0);
+    for (const file of [CONFIG, FIXTURE]) {
+      const orig = parse(fs.readFileSync(file, 'utf8'));
+      const again = parse(write(orig));
+      assert.deepStrictEqual(again, underived(parse(fs.readFileSync(file, 'utf8'))), file);
+      assert.ok(orig.WATCHLIST.length + orig.TICKER_UNIVERSE.length > 0);
+    }
+    assert.ok(/import_duty_est/.test(fs.readFileSync(FIXTURE, 'utf8')), 'the fixture keeps the old layout on purpose');
   },
   'writing twice gives the same bytes'() {
     const first = write(parse(fs.readFileSync(CONFIG, 'utf8')));

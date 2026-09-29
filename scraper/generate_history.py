@@ -263,6 +263,9 @@ def audit_anchors(cfg, history, today):
 # Config patch (avg_price and prev_avg only)
 # ---------------------------------------------------------------------------
 
+NUM = r"\d+(?:\.\d+)?"   # a price as written in cars.config.js
+
+
 def patch_config_prices(config_text, price_data, results=None):
     """Returns the patched config text. If a dict is passed as results, each
     car's decision is recorded in it: {result: applied | unchanged | refused |
@@ -279,23 +282,24 @@ def patch_config_prices(config_text, price_data, results=None):
         bs=idm.start(); be=updated.find("\n  },",bs)
         if be==-1: results[cid]={"result":"not found","new":new_avg}; print(f"  WARN {cid}: block end not found"); continue
         be+=len("\n  },"); block=updated[bs:be]
-        oam=re.search(r"avg_price:\s*(\d+)",block)
+        # NUM also takes a decimal (the editor allows one), so the whole old number is read and replaced
+        oam=re.search(rf"avg_price:\s*({NUM})",block)
         if not oam: results[cid]={"result":"not found","new":new_avg}; continue
-        old_avg=int(oam.group(1))
+        old_txt=oam.group(1); old_avg=float(old_txt) if "." in old_txt else int(old_txt)
         # The car's own configured band is the sanity check: a median far outside it means the
         # search matched a different model, so keep the current price and say so
-        lo=re.search(r"low_price:\s*(\d+)",block); hi=re.search(r"high_price:\s*(\d+)",block)
-        if lo and hi and not (int(lo.group(1))*0.8 <= new_avg <= int(hi.group(1))*1.25):
-            allowed=[int(int(lo.group(1))*0.8), int(int(hi.group(1))*1.25)]
+        lo=re.search(rf"low_price:\s*({NUM})",block); hi=re.search(rf"high_price:\s*({NUM})",block)
+        if lo and hi and not (float(lo.group(1))*0.8 <= new_avg <= float(hi.group(1))*1.25):
+            allowed=[int(float(lo.group(1))*0.8), int(float(hi.group(1))*1.25)]
             results[cid]={"result":"refused","old":old_avg,"new":new_avg,"allowed":allowed,
-                          "low_price":int(lo.group(1)),"high_price":int(hi.group(1))}
+                          "low_price":round(float(lo.group(1))),"high_price":round(float(hi.group(1)))}
             print(f"  !!  {cid}: median ${new_avg:,} is outside ${allowed[0]:,}-${allowed[1]:,} (80% of low_price to 125% of high_price), not applied"); continue
         if new_avg==old_avg:
             # Unchanged price: leave prev_avg alone so the change arrow keeps the last real move
             results[cid]={"result":"unchanged","old":old_avg,"new":new_avg}
             print(f"  ==  {cid}: unchanged at ${new_avg:,}"); continue
-        nb=re.sub(r"(avg_price:\s*)\d+",rf"\g<1>{new_avg}",block,count=1)
-        nb=re.sub(r"(prev_avg:\s*)\d+",rf"\g<1>{old_avg}",nb,count=1)
+        nb=re.sub(rf"(avg_price:\s*){NUM}",rf"\g<1>{new_avg}",block,count=1)
+        nb=re.sub(rf"(prev_avg:\s*){NUM}",rf"\g<1>{old_txt}",nb,count=1)
         updated=updated[:bs]+nb+updated[be:]
         results[cid]={"result":"applied","old":old_avg,"new":new_avg}
         print(f"  OK  {cid}: avg {old_avg:,}->{new_avg:,}")
