@@ -13,12 +13,14 @@ Weekly step after scrape_prices.py:
      recent sales ("scraped"). The page derives import duty and the
      first-year total from avg_price, so the config stores neither.
   3. Write frontend/data.js from the patched prices and the store:
-       BAKED_HISTORY[id] = daily ESTIMATE line: a deterministic 365-day
-                           mean-reverting path that ends at the tracked price
-                           (kind "walk"). Indicative only, not observed prices.
+       BAKED_HISTORY[id] = {start, prices}: daily ESTIMATE line, a deterministic
+                           365-day mean-reverting path that ends at the tracked
+                           price, one price per day from start. Indicative
+                           only, not observed prices. The page expands it to
+                           [{date, price}].
        BAKED_SALES[id]   = individual real sales [{date, price, venue}] for the
                            transaction scatter.
-       BAKED_META[id]    = {last_sale, n_total, n_plotted, ...} for the
+       BAKED_META[id]    = {last_sale, n_total, n_plotted, as_of} for the
                            sample-size display.
 
 DATA MODEL (price_history.json):
@@ -54,8 +56,7 @@ DATA_JS_PATH       = ROOT / "frontend" / "data.js"
 CONFIG_JS_PATH     = ROOT / "frontend" / "cars.config.js"
 RESULTS_PATH       = ROOT / "scraper" / "run_results.json"   # read by report.py; gitignored
 
-ROLL_WINDOW  = 90    # trailing days for the 90-day meta figures
-STALE_DAYS   = 30    # no real sale in this many days -> stale flag
+STALE_DAYS   = 30    # no real sale in this many days -> counted as stale
 WALK_DAYS    = 365
 PLAUSIBLE_LO = 0.25   # drop "sales" below 25% of tracked price
 PLAUSIBLE_HI = 4.0    # drop "sales" above 4x tracked price
@@ -191,20 +192,15 @@ def build_for_car(entry, today, avg_price):
     lo_b, hi_b = avg_price * PLAUSIBLE_LO, avg_price * PLAUSIBLE_HI
     clean = sorted([s for s in real if lo_b <= float(s["price"]) <= hi_b], key=lambda s: s["date"])
     walk = make_synthetic_leadin(entry.get("_id", "car"), avg_price, today, days=WALK_DAYS)
-    line = [{"date": p["date"], "price": p["price"], "lo": p["price"], "hi": p["price"],
-             "volume": 0, "kind": "walk"} for p in walk]
+    # One point per day from start, so the dates need not be stored: the page expands them
+    line = {"start": walk[0]["date"], "prices": [int(p["price"]) for p in walk]}
     scatter = [{"date": s["date"], "price": round(float(s["price"])), "venue": s["venue"]} for s in clean]
-    n_plotted = sum(1 for s in clean if line[0]["date"] <= s["date"] <= line[-1]["date"])   # the chart's date range
+    n_plotted = sum(1 for s in clean if walk[0]["date"] <= s["date"] <= walk[-1]["date"])   # the chart's date range
     if clean:
-        sd = [d(s["date"]) for s in clean]; sp = [float(s["price"]) for s in clean]
-        win90 = [sp[i] for i, x in enumerate(sd) if (today - x).days <= ROLL_WINDOW]
-        meta = {"last_sale": sd[-1].isoformat(), "n_total": len(clean), "n_plotted": n_plotted, "n_sales_90d": len(win90),
-                "median_90d": round(statistics.median(win90)) if win90 else round(statistics.median(sp)),
-                "stale": (today - sd[-1]).days > STALE_DAYS, "confidence": "estimate+sales",
-                "as_of": sd[-1].isoformat()}
+        last = d(clean[-1]["date"]).isoformat()
+        meta = {"last_sale": last, "n_total": len(clean), "n_plotted": n_plotted, "as_of": last}
     else:
-        meta = {"last_sale": None, "n_total": 0, "n_plotted": 0, "n_sales_90d": 0, "median_90d": avg_price,
-                "stale": True, "confidence": "estimate", "as_of": None}
+        meta = {"last_sale": None, "n_total": 0, "n_plotted": 0, "as_of": None}
     return line, scatter, meta
 
 def build_data_js(history, today, cfg):
@@ -221,7 +217,7 @@ def build_data_js(history, today, cfg):
            "var BAKED_SALES = "   + json.dumps(sales, separators=(",",":")) + ";\n" +
            "var BAKED_META = "    + json.dumps(meta,  separators=(",",":")) + ";\n")
     write_atomic(DATA_JS_PATH, out)
-    stale=sum(1 for m in meta.values() if m.get("stale"))
+    stale=sum(1 for m in meta.values() if not m["last_sale"] or (today-d(m["last_sale"])).days>STALE_DAYS)
     print(f"OK  data.js: {len(baked)} cars, {sum(len(s) for s in sales.values())} real sales, {stale} stale")
     return audit_anchors(cfg, history, today)
 

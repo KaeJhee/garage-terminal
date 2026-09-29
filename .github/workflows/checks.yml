@@ -1,7 +1,7 @@
 name: Checks
 
-# Runs on every push and pull request: the scraper and history tests, the config
-# writer round trip, and the cars.config.js sanity checks.
+# Runs on every push and pull request: the scraper and history tests, the data.js
+# format checks, the config writer round trip, and the cars.config.js sanity checks.
 on:
   push:
   pull_request:
@@ -31,6 +31,9 @@ jobs:
 
       - name: Report and issue tests
         run: python tests/test_report.py
+
+      - name: data.js format checks
+        run: python tests/test_data_js.py
 
       - name: Config writer round trip
         run: node tests/test_config_roundtrip.js

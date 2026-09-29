@@ -399,12 +399,8 @@ canvas { display: block; }
   letter-spacing: .03em;
 }
 .market-status .ms-item { display: inline-flex; align-items: center; gap: 5px; }
-.market-status .ms-dot { width: 6px; height: 6px; border-radius: 50%; }
 .market-status .ms-val { color: var(--text); }
 .ms-badge { padding: 1px 7px; border-radius: 3px; font-weight: 600; font-size: 9px; letter-spacing: .06em; }
-.ms-badge.real   { background: rgba(58,184,110,.14); color: var(--green); }
-.ms-badge.stale  { background: rgba(232,160,32,.16); color: var(--amber); }
-.ms-badge.manual { background: rgba(92,112,128,.16); color: var(--text-muted); }
 .ms-badge.thin   { background: rgba(240,110,110,.14); color: var(--red); }
 .ms-badge.est    { background: rgba(75,142,245,.14); color: var(--blue); }
 .cfg-btn {
@@ -1340,6 +1336,14 @@ canvas { display: block; }
 <script src="cars.config.js"></script>
 <script src="config-writer.js"></script>
 <script src="data.js"></script>
+<script>
+// data.js stores each chart line as {start, prices}, one price per day. Expand it to
+// [{date, price}] with UTC days. An older data.js line is already an array and stays as is.
+if (typeof BAKED_HISTORY !== 'undefined') Object.keys(BAKED_HISTORY).forEach(function(id) {
+  var h = BAKED_HISTORY[id], t0 = h && !Array.isArray(h) ? Date.parse(h.start + 'T00:00:00Z') : NaN;
+  if (!isNaN(t0)) BAKED_HISTORY[id] = h.prices.map(function(p, i) { return { date: new Date(t0 + i * 86400000).toISOString().slice(0, 10), price: p }; });
+});
+</script>
 
 <script>
 // ============================================================
@@ -1717,13 +1721,8 @@ function renderMarketStatus(car) {
   items.push('<span class="ms-item">indicative line, anchored to tracked price</span>');
 
   var total = meta.n_total || 0;
-  // Dots only cover the chart's date range. Older data.js files lack n_plotted, so count it here.
+  // Dots only cover the chart's date range
   var n = meta.n_plotted;
-  if (n == null) {
-    var hist = (typeof BAKED_HISTORY !== 'undefined' && BAKED_HISTORY[car.id]) || [];
-    var sold = (typeof BAKED_SALES !== 'undefined' && BAKED_SALES[car.id]) || [];
-    n = hist.length ? sold.filter(function(s){ return s.date >= hist[0].date && s.date <= hist[hist.length-1].date; }).length : total;
-  }
   if (total > 0) {
     var thin = n < 3;
     items.push('<span class="ms-item">' + (thin ? '<span class="ms-badge thin">THIN</span>' : '') +
@@ -1738,13 +1737,6 @@ function renderMarketStatus(car) {
   el.innerHTML = items.join('');
 }
 
-function dashForKind(kind) {
-  // solid = real observed; dashed = inferred (interpolated); dotted/grey = stale/manual
-  if (kind === 'walk' || kind === 'observed') return undefined;
-  if (kind === 'interpolated') return [5, 4];
-  return [2, 4]; // stale / manual / synthetic
-}
-
 function renderChart() {
   const car = WATCHLIST.find(c=>c.id===activeId);
   if (!car) return;
@@ -1752,9 +1744,6 @@ function renderChart() {
   const history = getHistory(activeId, activePeriod);
   const labels  = history.map(d=>d.date);
   const prices  = history.map(d=>d.price);
-  const los     = history.map(d=>d.lo != null ? d.lo : d.price);
-  const his     = history.map(d=>d.hi != null ? d.hi : d.price);
-  const kinds   = history.map(d=>d.kind || 'observed');
 
   renderPeriodStats(calcStats(history));
   renderMarketStatus(car);
@@ -1791,19 +1780,18 @@ function renderChart() {
       labels: displayLabels,
       datasets: [
         { // band upper (fills down to lower)
-          label: 'hi', data: his, borderColor: 'transparent', borderWidth: 0,
+          label: 'hi', data: prices, borderColor: 'transparent', borderWidth: 0,
           pointRadius: 0, fill: '+1', backgroundColor: car.color+'14', tension: 0.2, order: 4,
         },
         { // band lower
-          label: 'lo', data: los, borderColor: 'transparent', borderWidth: 0,
+          label: 'lo', data: prices, borderColor: 'transparent', borderWidth: 0,
           pointRadius: 0, fill: false, tension: 0.2, order: 4,
         },
-        { // rolling-90d median line, styled by data kind
+        { // rolling-90d median line
           label: 'median', data: prices, borderColor: car.color, borderWidth: 1.6,
           backgroundColor: grad, fill: false, tension: 0.2,
           pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: car.color,
           pointHoverBorderColor: '#080a0c', pointHoverBorderWidth: 2, order: 1,
-          segment: { borderDash: c => dashForKind(kinds[c.p1DataIndex]) },
         },
         { // real-sale scatter dots
           label: 'sales', data: scatter, showLine: false,
@@ -1962,7 +1950,6 @@ function renderPortfolio() {
   // Category averages — extend these if you add new categories
   var jdmCars    = WATCHLIST.filter(function(c){ return c.category === 'JDM'; });
   var exoticCars = WATCHLIST.filter(function(c){ return c.category === 'Exotic'; });
-  var modernCars = WATCHLIST.filter(function(c){ return c.category === 'Modern'; });
 
   var jdmAvg    = jdmCars.length    ? jdmCars.reduce(function(s,c){return s+c.avg_price;},0)    / jdmCars.length    : null;
   var exoticAvg = exoticCars.length ? exoticCars.reduce(function(s,c){return s+c.avg_price;},0) / exoticCars.length : null;
